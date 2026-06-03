@@ -24,7 +24,12 @@ from .models import (
 )
 from .policy import Policy
 
-__version__ = "0.1.0"
+__version__ = "0.1.0"  # package (PyPI) version
+
+# Highest delego *protocol* version (see the wire spec's "Protocol versions")
+# this reference implements. The spec leads the reference: the spec's version
+# MUST always be >= this. Distinct from __version__, the package release version.
+__protocol_version__ = "0.2.0"
 
 __all__ = [
     "ProposedAction",
@@ -39,4 +44,5 @@ __all__ = [
     "OUTCOME_DENY",
     "OUTCOME_APPROVAL",
     "__version__",
+    "__protocol_version__",
 ]
