@@ -67,7 +67,8 @@ product. They are enumerated, with the "do not violate" framing, in
 - `delego/approval.py` — file-backed human approval queue
   (pending/approved/denied/consumed).
 - `delego/brokers.py` — `BrokerAdapter` protocol; `NullBroker` (default, holds no
-  creds, simulates execution) and `HTTPProxyBroker` (sketch, not wired).
+  creds, simulates execution) and `HTTPProxyBroker` (forwards an authorised action
+  to an external credential gateway that injects the secret).
 - `delego/engine.py` — `Firewall.propose()` / `Firewall.resolve()`; the
   confused-deputy guard lives in `resolve`.
 - `delego/config.py` — `Paths.resolve` (home precedence), the `.gitignore`

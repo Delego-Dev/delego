@@ -147,46 +147,70 @@ class AuditLog:
         return entry
 
     # -- verify ----------------------------------------------------------- #
-    def verify(self) -> tuple[bool, list[str]]:
+    def verify(
+        self, expected_head: Optional[tuple[int, str]] = None
+    ) -> tuple[bool, list[str]]:
         """Walk the chain: recompute hashes, check linkage, verify signatures.
 
         Tampering takes many forms — an edited field, a *removed* field, an
         unparseable line — so every step is defensive: a malformed receipt is
         reported as a problem, never allowed to crash the verification (a verifier
         that throws is a verifier an attacker can silence by corrupting one line).
+
+        **Truncation caveat.** Hash-chaining catches edits, reordering, and
+        deletions from the *middle*, but **not** truncation of the most recent
+        receipts: a tail-truncated ledger is still an internally valid prefix and
+        verifies clean on its own. Nor does any of this help against an attacker
+        who holds the (local) signing key. To detect rollback you must anchor the
+        head *outside* this file: persist the ``(seq, entry_hash)`` returned by
+        ``append`` somewhere the attacker can't also rewrite, and pass it as
+        ``expected_head`` here — verification then fails if the ledger's last
+        receipt doesn't match it.
         """
         self._load_keys()
         problems: list[str] = []
         prev = GENESIS
-        if not self.path.exists():
-            return True, []
-        for lineno, line in enumerate(self.path.read_text(encoding="utf-8").splitlines()):
-            if not line.strip():
-                continue
-            try:
-                e = json.loads(line)
-            except Exception:
-                problems.append(f"line {lineno}: unparseable receipt (corrupt)")
-                prev = None  # the chain cannot link across a broken line
-                continue
-            where = f"seq {e['seq']}" if isinstance(e, dict) and "seq" in e else f"line {lineno}"
-            try:
-                payload = {k: e[k] for k in _PAYLOAD_KEYS}
-            except (KeyError, TypeError):
-                missing = [k for k in _PAYLOAD_KEYS if not (isinstance(e, dict) and k in e)]
-                problems.append(f"{where}: missing field(s) {missing} (tampered)")
-                prev = e.get("entry_hash") if isinstance(e, dict) else None
-                continue
-            recomputed = sha256_hex(canonical_json(payload))
-            if recomputed != e.get("entry_hash"):
-                problems.append(f"{where}: content hash mismatch (tampered)")
-            if e.get("prev_hash") != prev:
-                problems.append(f"{where}: broken chain link")
-            try:
-                self._pub.verify(bytes.fromhex(e["signature"]), e["entry_hash"].encode("utf-8"))
-            except Exception:
-                problems.append(f"{where}: bad signature")
-            prev = e.get("entry_hash")
+        last_seq: Optional[int] = None
+        last_hash: Optional[str] = None
+        if self.path.exists():
+            for lineno, line in enumerate(self.path.read_text(encoding="utf-8").splitlines()):
+                if not line.strip():
+                    continue
+                try:
+                    e = json.loads(line)
+                except Exception:
+                    problems.append(f"line {lineno}: unparseable receipt (corrupt)")
+                    prev = None  # the chain cannot link across a broken line
+                    continue
+                where = f"seq {e['seq']}" if isinstance(e, dict) and "seq" in e else f"line {lineno}"
+                try:
+                    payload = {k: e[k] for k in _PAYLOAD_KEYS}
+                except (KeyError, TypeError):
+                    missing = [k for k in _PAYLOAD_KEYS if not (isinstance(e, dict) and k in e)]
+                    problems.append(f"{where}: missing field(s) {missing} (tampered)")
+                    prev = e.get("entry_hash") if isinstance(e, dict) else None
+                    continue
+                recomputed = sha256_hex(canonical_json(payload))
+                if recomputed != e.get("entry_hash"):
+                    problems.append(f"{where}: content hash mismatch (tampered)")
+                if e.get("prev_hash") != prev:
+                    problems.append(f"{where}: broken chain link")
+                try:
+                    self._pub.verify(bytes.fromhex(e["signature"]), e["entry_hash"].encode("utf-8"))
+                except Exception:
+                    problems.append(f"{where}: bad signature")
+                prev = e.get("entry_hash")
+                last_seq, last_hash = e.get("seq"), e.get("entry_hash")
+
+        if expected_head is not None:
+            exp_seq, exp_hash = expected_head
+            if last_seq != exp_seq or last_hash != exp_hash:
+                found = f"seq {last_seq}" if last_seq is not None else "empty ledger"
+                problems.append(
+                    f"head mismatch: expected seq {exp_seq} ({exp_hash[:12]}…), "
+                    f"found {found} — ledger truncated or rolled back"
+                )
+
         return (len(problems) == 0), problems
 
     # -- queries ---------------------------------------------------------- #

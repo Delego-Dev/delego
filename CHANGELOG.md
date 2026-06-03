@@ -6,6 +6,39 @@ adhere to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.2] — 2026-06-04
+
+Protocol unchanged (still 0.2).
+
+### Security
+- **Fail-open in the `amount` constraint fixed.** Amounts are now parsed as
+  `Decimal` and **non-finite (`nan`/`inf`), negative, and non-numeric values are
+  denied**. Previously `float('nan') > max` is `False`, so an `amount: "nan"`
+  slipped past any cap. Also fixes float rounding on money comparisons.
+- **Honest audit-tamper docs + a rollback hook.** `verify(expected_head=(seq, hash))`
+  lets you anchor the ledger head externally to detect **tail truncation**, which
+  hash-chaining alone can't (a truncated prefix verifies clean). README/SECURITY
+  now state this and the local-signing-key limit plainly rather than overclaiming.
+
+### Changed
+- **`mcp` is now an optional extra.** `pip install delego` no longer pulls in
+  `mcp` and its dependency tree (which can conflict with a system PyJWT); install
+  the server with `pip install "delego[mcp]"`. Library/CLI users get a lean core.
+- Ship a `py.typed` marker so downstream type checkers use delego's type hints.
+
+### Added
+- **`HTTPProxyBroker` is now a real adapter** (was a sketch): it forwards an
+  authorised action — with its `intent_hash` and `action_fingerprint` for
+  gateway-side re-verification — to an external credential gateway (OneCLI /
+  vault / proxy) over stdlib HTTP, and returns the gateway's response. The
+  upstream secret stays in the gateway; it never enters delego (`delego/brokers.py`,
+  `tests/test_broker.py`).
+- **`ROADMAP.md`** — a public, ordered plan (broker adapters → approval surfaces →
+  signed authorization token → single-writer daemon) with "where to help".
+- README **"Build on delego"** section linking the
+  [sample app](https://github.com/Delego-Dev/sample-app) and the broker
+  extension point.
+
 ## [0.2.1] — 2026-06-04
 
 Protocol unchanged (still 0.2). Package versions are `0.x.y` where `x` is the
@@ -32,7 +65,7 @@ implemented protocol and `y` the iteration.
 ## [0.2.0] — 2026-06-04
 
 First public release on PyPI. (0.1.0 was the initial implementation and was never
-published.) Implements wire-protocol **0.2.0**; see
+published.) Implements wire-protocol **0.2**; see
 [`__protocol_version__`](delego/__init__.py).
 
 ### Security
@@ -99,6 +132,7 @@ published.) Implements wire-protocol **0.2.0**; see
   a FastMCP server exposing propose / resolve / audit_tail / show_policy.
 - `NullBroker` (default; holds no credentials) and an `HTTPProxyBroker` sketch.
 
-[Unreleased]: https://github.com/Delego-Dev/delego/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/Delego-Dev/delego/compare/v0.2.2...HEAD
+[0.2.2]: https://github.com/Delego-Dev/delego/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/Delego-Dev/delego/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/Delego-Dev/delego/releases/tag/v0.2.0

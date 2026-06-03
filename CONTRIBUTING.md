@@ -30,7 +30,8 @@ Requires Python 3.10+.
 git clone https://github.com/Delego-Dev/delego
 cd delego
 python -m venv .venv && . .venv/bin/activate
-pip install -e ".[dev]"
+pip install -e ".[dev]"          # tests; add the `mcp` extra to run the server:
+pip install -e ".[dev,mcp]"      # `mcp` is optional, kept out of the core deps
 ```
 
 ## Running the demo and tests

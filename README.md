@@ -62,13 +62,19 @@ existing broker layer rather than competing with it.
    to run action B (the confused-deputy guard), and cannot replay the *same*
    approval to run action A twice — an approval releases its action exactly once.
 3. **Tamper-evident audit** — receipts form an Ed25519-signed hash chain.
-   Editing, deleting a receipt, or removing a field from one breaks
+   Editing, reordering, removing a receipt, or dropping a field breaks
    verification, which reports the fault rather than trusting the ledger.
+   *Caveats (be precise):* hash-chaining does **not** catch truncation of the
+   most recent receipts (a tail-truncated prefix verifies clean), and the local
+   signing key protects nothing against a host compromise. For rollback
+   detection, anchor the head externally and pass it to `verify(expected_head=…)`;
+   for key safety, use an HSM/KMS. See [SECURITY.md](SECURITY.md).
 
 ## Quickstart
 
 ```bash
-pip install delego        # installs the `delego` CLI and the `delego-mcp` server
+pip install delego          # the `delego` library + CLI
+# pip install "delego[mcp]" # add the `delego-mcp` server (MCP is an optional extra)
 delego init               # creates ~/.delego with signing keys and an example policy
 delego policy             # inspect the active policy
 ```
@@ -97,7 +103,8 @@ delego verify            # check the audit chain (hashes, linkage, signatures)
 
 ### Agent side (MCP) — wiring into Claude Code
 
-delego ships an MCP server (`delego_mcp`) over stdio. Register it in your MCP
+delego ships an MCP server (`delego_mcp`) over stdio — install it with the `mcp`
+extra: `pip install "delego[mcp]"`. Register it in your MCP
 config (for Claude Code, `.mcp.json` at the project root) so the agent can
 propose actions. Set `DELEGO_HOME` to keep the policy, signing keys, and ledger
 project-scoped under `.claude/.delego`:
@@ -158,15 +165,42 @@ rules:
 Supported constraints: `amount` (cap + currency), `allow_list`
 (field-in-set), `rate_limit` (max per minute/hour/day, counted from the ledger).
 
+## Build on delego
+
+Three ways to use it, lowest friction first:
+
+- **As an MCP server** — `delego init`, add the `delego-mcp` server to your MCP
+  config, and your agent proposes actions instead of executing them. No code.
+- **As a library** — `pip install delego`, write a policy + a `BrokerAdapter`, and
+  call `fw.propose(...)` in your tool-call path.
+- **Behind a service** — wrap the `Firewall` in an HTTP API so many agents share
+  one decision point and one audit chain.
+
+The one extension point is the **broker** — where your credential lives and the
+authorised action actually runs. delego never holds the secret:
+
+- `NullBroker` (default) — simulates execution; for demos and tests.
+- `HTTPProxyBroker(gateway_url)` — forwards the authorised action to an external
+  credential gateway (OneCLI / vault / proxy) that injects the secret upstream.
+- Your own — implement `execute(action) -> dict` against the `BrokerAdapter`
+  protocol in [`delego/brokers.py`](delego/brokers.py).
+
+▶ **[Delego-Dev/sample-app](https://github.com/Delego-Dev/sample-app)** — a
+FastAPI service built on the published package, with the full
+propose → approve → resolve loop and a copy-paste curl walkthrough. The best
+starting point for building your own.
+
+See **[ROADMAP.md](ROADMAP.md)** for where delego is going and where to help.
+
 ## Status
 
 - **Implemented (protocol 0.2):** the policy engine, intent hashing, action
   fingerprinting, the confused-deputy guard, intent-bound + single-use human
   approvals, and the signed, hash-chained audit ledger with verification.
-- **Stubbed:** the broker. The default `NullBroker` holds no credentials and
-  makes no real request — it records what *would* be sent. Swap in a real
-  `BrokerAdapter` (see the `HTTPProxyBroker` sketch in `delego/brokers.py`) to act
-  on live services.
+- **Brokers:** the default `NullBroker` holds no credentials and makes no real
+  request — it records what *would* be sent (for demos and tests). `HTTPProxyBroker`
+  forwards an authorised action to an external credential gateway; or write your
+  own against the `BrokerAdapter` protocol in `delego/brokers.py`.
 - **Not yet:** the authorization token (spec 0.3), an always-on daemon (state is
   file-backed and shared by the CLI and MCP server), and a non-MCP HTTP surface.
 - **Known limitations:** concurrent writes to the file-backed ledger and approval

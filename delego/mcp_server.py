@@ -6,7 +6,7 @@ Sensitive actions come back as ``needs_approval`` with an approval id that a
 human releases out-of-band (``delego approve <id>``), after which the agent
 calls ``delego_resolve_action`` to complete it.
 
-v0.1 uses the default :class:`NullBroker` (no real requests, no credentials).
+By default the firewall uses :class:`NullBroker` (no real requests, no credentials).
 Point it at a real credential broker to act on live services.
 """
 
