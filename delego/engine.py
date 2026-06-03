@@ -15,7 +15,13 @@ Two entry points:
 
 from __future__ import annotations
 
-from .approval import STATUS_APPROVED, STATUS_DENIED, STATUS_PENDING, ApprovalStore
+from .approval import (
+    STATUS_APPROVED,
+    STATUS_CONSUMED,
+    STATUS_DENIED,
+    STATUS_PENDING,
+    ApprovalStore,
+)
 from .audit import AuditLog
 from .brokers import BrokerAdapter, NullBroker
 from .models import (
@@ -48,7 +54,11 @@ class Firewall:
 
         if outcome == OUTCOME_APPROVAL:
             approval_id = self.approvals.create(
-                action_fingerprint=fp, intent_hash=ih, summary=action.summary()
+                action_fingerprint=fp,
+                intent_hash=ih,
+                summary=action.summary(),
+                instruction=action.instruction,
+                rule=rule,
             )
             self.audit.append(
                 phase="decision",
@@ -89,21 +99,28 @@ class Firewall:
         # The approval is bound to one exact action. A different action under
         # the same approval id is refused and recorded.
         if rec["action_fingerprint"] != fp:
-            reasons = [
+            return self._refuse(
+                action,
+                ih,
+                fp,
+                approval_id,
                 "approval/action mismatch: this approval was issued for a different "
-                "action (possible confused-deputy / substituted action)"
-            ]
-            self.audit.append(
-                phase="execution",
-                outcome=OUTCOME_DENY,
-                rule=None,
-                reasons=reasons,
-                intent_hash=ih,
-                action_fingerprint=fp,
-                action_summary=action.summary(),
-                approval_id=approval_id,
+                "action (possible confused-deputy / substituted action)",
             )
-            return Decision(OUTCOME_DENY, None, reasons, ih, fp, approval_id=approval_id)
+
+        # --- intent guard ---------------------------------------------- #
+        # The approval is also bound to the instruction that authorised it. The
+        # same action carried under a different instruction is refused, so the
+        # human's "yes" can't be re-pointed at a new claimed authority.
+        if rec.get("intent_hash") != ih:
+            return self._refuse(
+                action,
+                ih,
+                fp,
+                approval_id,
+                "approval/intent mismatch: this approval was issued for a different "
+                "instruction",
+            )
 
         if rec["status"] == STATUS_PENDING:
             return Decision(
@@ -111,22 +128,44 @@ class Firewall:
             )
 
         if rec["status"] == STATUS_DENIED:
-            reasons = ["human denied this action"]
-            self.audit.append(
-                phase="execution",
-                outcome=OUTCOME_DENY,
-                rule=None,
-                reasons=reasons,
-                intent_hash=ih,
-                action_fingerprint=fp,
-                action_summary=action.summary(),
-                approval_id=approval_id,
-            )
-            return Decision(OUTCOME_DENY, None, reasons, ih, fp, approval_id=approval_id)
+            return self._refuse(action, ih, fp, approval_id, "human denied this action")
 
-        # approved
+        # --- single-use guard ------------------------------------------ #
+        # An approval releases its action exactly once. A replayed resolve of an
+        # already-consumed approval is refused, so one human "yes" can't be
+        # executed again and again.
+        if rec["status"] == STATUS_CONSUMED:
+            return self._refuse(
+                action,
+                ih,
+                fp,
+                approval_id,
+                "approval already used: this single-use approval has already released "
+                "its action",
+            )
+
+        # approved — consume *before* executing so it can never be replayed, even
+        # if execution is retried.
+        assert rec["status"] == STATUS_APPROVED
+        self.approvals.consume(approval_id)
         reasons = [f"human approved by {rec.get('approver')!r}"]
-        return self._execute(action, None, reasons, ih, fp, approval_id=approval_id)
+        return self._execute(action, rec.get("rule"), reasons, ih, fp, approval_id=approval_id)
+
+    # ------------------------------------------------------------------ #
+    def _refuse(self, action, intent_hash, fingerprint, approval_id, reason) -> Decision:
+        """Record an execution-phase deny on the ledger and return it."""
+        reasons = [reason]
+        self.audit.append(
+            phase="execution",
+            outcome=OUTCOME_DENY,
+            rule=None,
+            reasons=reasons,
+            intent_hash=intent_hash,
+            action_fingerprint=fingerprint,
+            action_summary=action.summary(),
+            approval_id=approval_id,
+        )
+        return Decision(OUTCOME_DENY, None, reasons, intent_hash, fingerprint, approval_id=approval_id)
 
     # ------------------------------------------------------------------ #
     def _execute(self, action, rule, reasons, intent_hash, fingerprint, approval_id) -> Decision:

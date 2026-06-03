@@ -8,6 +8,8 @@ confused-deputy guard relies on.
 
 from __future__ import annotations
 
+import json
+
 from delego import (
     OUTCOME_ALLOW,
     OUTCOME_APPROVAL,
@@ -58,6 +60,98 @@ def test_human_denied_then_resolve_denies(firewall):
     last = firewall.audit.tail(999)[-1]
     assert last["phase"] == "execution"
     assert last["outcome"] == OUTCOME_DENY
+
+
+# --------------------------------------------------------------------------- #
+# approvals are single-use: one human "yes" releases the action exactly once
+# --------------------------------------------------------------------------- #
+def test_approval_is_single_use(firewall):
+    transfer = _small_transfer()
+    d = firewall.propose(transfer)
+    firewall.approvals.decide(d.approval_id, approved=True, approver="koishore")
+
+    first = firewall.resolve(d.approval_id, transfer)
+    assert first.outcome == OUTCOME_ALLOW
+    assert first.executed is True
+
+    # Replaying the same approved id must NOT execute the action again.
+    second = firewall.resolve(d.approval_id, transfer)
+    assert second.outcome == OUTCOME_DENY
+    assert second.executed is False
+    assert any("already used" in r for r in second.reasons)
+
+    # The approval is consumed, and exactly one allow receipt exists for it.
+    assert firewall.approvals.get(d.approval_id)["status"] == "consumed"
+    allows = [e for e in firewall.audit.tail(999) if e["outcome"] == OUTCOME_ALLOW]
+    assert len(allows) == 1
+    # The replay was recorded as an execution/deny.
+    assert firewall.audit.tail(999)[-1]["outcome"] == OUTCOME_DENY
+
+
+# --------------------------------------------------------------------------- #
+# the approval is bound to the instruction too, not just the action fingerprint
+# --------------------------------------------------------------------------- #
+def test_resolve_with_different_instruction_denies(firewall):
+    transfer = _small_transfer()
+    d = firewall.propose(transfer)
+    firewall.approvals.decide(d.approval_id, approved=True, approver="koishore")
+
+    # Same action (identical fingerprint) but a different claimed instruction.
+    restated = ProposedAction(
+        instruction="send the deposit to my landlord",
+        method=transfer.method,
+        url=transfer.url,
+        params=transfer.params,
+    )
+    assert restated.fingerprint == transfer.fingerprint  # the action is unchanged
+    assert restated.intent_hash != transfer.intent_hash  # but the intent is not
+
+    res = firewall.resolve(d.approval_id, restated)
+    assert res.outcome == OUTCOME_DENY
+    assert res.executed is False
+    assert any("intent mismatch" in r for r in res.reasons)
+    # Not consumed — the genuine instruction can still be resolved.
+    assert firewall.approvals.get(d.approval_id)["status"] == "approved"
+
+
+# --------------------------------------------------------------------------- #
+# a rate limit that cannot be evaluated must fail closed, never silently pass
+# --------------------------------------------------------------------------- #
+def test_rate_limit_without_audit_fails_closed(make_firewall):
+    fw = make_firewall(RATE_LIMITED_POLICY)
+    action = ProposedAction(
+        instruction="check my balance",
+        method="GET",
+        url="https://api.examplebank.in/accounts/me",
+    )
+    # Evaluate the policy with no audit log available to read the counter.
+    outcome, rule, reasons = fw.policy.evaluate(action, audit=None)
+    assert outcome == OUTCOME_DENY
+    assert any("rate_limit" in r for r in reasons)
+
+
+# --------------------------------------------------------------------------- #
+# verify() reports tampering instead of crashing when a field is removed
+# --------------------------------------------------------------------------- #
+def test_verify_reports_removed_field_without_crashing(firewall):
+    firewall.propose(
+        ProposedAction(
+            instruction="check my balance",
+            method="GET",
+            url="https://api.examplebank.in/accounts/me",
+        )
+    )
+    assert firewall.audit.verify()[0] is True
+
+    # Delete a signed field from the first receipt (a cruder tamper than editing).
+    path = firewall.audit.path
+    rows = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+    del rows[0]["intent_hash"]
+    path.write_text("\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8")
+
+    ok, problems = firewall.audit.verify()  # must not raise
+    assert ok is False
+    assert any("missing field" in p for p in problems)
 
 
 # --------------------------------------------------------------------------- #

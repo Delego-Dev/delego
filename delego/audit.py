@@ -144,22 +144,45 @@ class AuditLog:
 
     # -- verify ----------------------------------------------------------- #
     def verify(self) -> tuple[bool, list[str]]:
-        """Walk the chain: recompute hashes, check linkage, verify signatures."""
+        """Walk the chain: recompute hashes, check linkage, verify signatures.
+
+        Tampering takes many forms — an edited field, a *removed* field, an
+        unparseable line — so every step is defensive: a malformed receipt is
+        reported as a problem, never allowed to crash the verification (a verifier
+        that throws is a verifier an attacker can silence by corrupting one line).
+        """
         self._load_keys()
         problems: list[str] = []
         prev = GENESIS
-        for e in self._entries():
-            payload = {k: e[k] for k in _PAYLOAD_KEYS}
+        if not self.path.exists():
+            return True, []
+        for lineno, line in enumerate(self.path.read_text(encoding="utf-8").splitlines()):
+            if not line.strip():
+                continue
+            try:
+                e = json.loads(line)
+            except Exception:
+                problems.append(f"line {lineno}: unparseable receipt (corrupt)")
+                prev = None  # the chain cannot link across a broken line
+                continue
+            where = f"seq {e['seq']}" if isinstance(e, dict) and "seq" in e else f"line {lineno}"
+            try:
+                payload = {k: e[k] for k in _PAYLOAD_KEYS}
+            except (KeyError, TypeError):
+                missing = [k for k in _PAYLOAD_KEYS if not (isinstance(e, dict) and k in e)]
+                problems.append(f"{where}: missing field(s) {missing} (tampered)")
+                prev = e.get("entry_hash") if isinstance(e, dict) else None
+                continue
             recomputed = sha256_hex(canonical_json(payload))
-            if recomputed != e["entry_hash"]:
-                problems.append(f"seq {e['seq']}: content hash mismatch (tampered)")
-            if e["prev_hash"] != prev:
-                problems.append(f"seq {e['seq']}: broken chain link")
+            if recomputed != e.get("entry_hash"):
+                problems.append(f"{where}: content hash mismatch (tampered)")
+            if e.get("prev_hash") != prev:
+                problems.append(f"{where}: broken chain link")
             try:
                 self._pub.verify(bytes.fromhex(e["signature"]), e["entry_hash"].encode("utf-8"))
             except Exception:
-                problems.append(f"seq {e['seq']}: bad signature")
-            prev = e["entry_hash"]
+                problems.append(f"{where}: bad signature")
+            prev = e.get("entry_hash")
         return (len(problems) == 0), problems
 
     # -- queries ---------------------------------------------------------- #
