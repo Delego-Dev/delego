@@ -61,6 +61,9 @@ product. They are enumerated, with the "do not violate" framing, in
   constraints (`amount`, `allow_list`, `rate_limit`). **No LLM here.**
 - `delego/audit.py` — tamper-evident receipt chain; `ensure_keys`, `append`,
   `verify`, `count_allows` (rate limiting reads the ledger).
+- `delego/_locking.py` — a cross-process file lock (`fcntl` / `msvcrt`) that
+  serialises ledger appends and approval read-modify-writes, so concurrent
+  writers to one home can't fork the chain or tear a record.
 - `delego/approval.py` — file-backed human approval queue
   (pending/approved/denied/consumed).
 - `delego/brokers.py` — `BrokerAdapter` protocol; `NullBroker` (default, holds no

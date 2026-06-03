@@ -17,6 +17,7 @@ import secrets
 from pathlib import Path
 from typing import Optional
 
+from ._locking import file_lock
 from .util import now_iso
 
 STATUS_PENDING = "pending"
@@ -54,55 +55,61 @@ class ApprovalStore:
         rule: Optional[str] = None,
     ) -> str:
         approval_id = "apr_" + secrets.token_hex(6)
-        self._append(
-            {
-                "id": approval_id,
-                "status": STATUS_PENDING,
-                "action_fingerprint": action_fingerprint,
-                "intent_hash": intent_hash,
-                # The human-readable instruction (so the approver sees *what* they
-                # are authorising, not just its hash) and the rule that parked it
-                # (so the execution receipt can attribute the allow correctly).
-                "instruction": instruction,
-                "rule": rule,
-                "summary": summary,
-                "created_at": now_iso(),
-                "decided_at": None,
-                "approver": None,
-            }
-        )
+        with file_lock(self.path):
+            self._append(
+                {
+                    "id": approval_id,
+                    "status": STATUS_PENDING,
+                    "action_fingerprint": action_fingerprint,
+                    "intent_hash": intent_hash,
+                    # The human-readable instruction (so the approver sees *what*
+                    # they are authorising, not just its hash) and the rule that
+                    # parked it (so the execution receipt attributes the allow).
+                    "instruction": instruction,
+                    "rule": rule,
+                    "summary": summary,
+                    "created_at": now_iso(),
+                    "decided_at": None,
+                    "approver": None,
+                }
+            )
         return approval_id
 
     def get(self, approval_id: str) -> Optional[dict]:
         return self._read().get(approval_id)
 
     def decide(self, approval_id: str, approved: bool, approver: str = "cli") -> Optional[dict]:
-        rec = self.get(approval_id)
-        if rec is None:
-            return None
-        if rec["status"] != STATUS_PENDING:
-            return rec  # already decided; idempotent
-        updated = {
-            **rec,
-            "status": STATUS_APPROVED if approved else STATUS_DENIED,
-            "decided_at": now_iso(),
-            "approver": approver,
-        }
-        self._append(updated)
-        return updated
+        # Lock the read-modify-write so two concurrent decisions can't both see
+        # `pending` and each append a terminal record.
+        with file_lock(self.path):
+            rec = self.get(approval_id)
+            if rec is None:
+                return None
+            if rec["status"] != STATUS_PENDING:
+                return rec  # already decided; idempotent
+            updated = {
+                **rec,
+                "status": STATUS_APPROVED if approved else STATUS_DENIED,
+                "decided_at": now_iso(),
+                "approver": approver,
+            }
+            self._append(updated)
+            return updated
 
     def consume(self, approval_id: str) -> Optional[dict]:
         """Mark an approved action as released. Single-use: an approval can only
         ever execute once, so a replayed ``resolve`` of the same approved id is
         refused. Transitions ``approved`` -> ``consumed``; a no-op otherwise."""
-        rec = self.get(approval_id)
-        if rec is None:
-            return None
-        if rec["status"] != STATUS_APPROVED:
-            return rec  # only an approved action can be consumed
-        updated = {**rec, "status": STATUS_CONSUMED, "consumed_at": now_iso()}
-        self._append(updated)
-        return updated
+        # Same read-modify-write lock: two racing resolves can't both consume.
+        with file_lock(self.path):
+            rec = self.get(approval_id)
+            if rec is None:
+                return None
+            if rec["status"] != STATUS_APPROVED:
+                return rec  # only an approved action can be consumed
+            updated = {**rec, "status": STATUS_CONSUMED, "consumed_at": now_iso()}
+            self._append(updated)
+            return updated
 
     def pending(self) -> list[dict]:
         return [r for r in self._read().values() if r["status"] == STATUS_PENDING]

@@ -6,6 +6,29 @@ adhere to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.1] — 2026-06-04
+
+Protocol unchanged (still 0.2). Package versions are `0.x.y` where `x` is the
+implemented protocol and `y` the iteration.
+
+### Security
+- **Concurrent-writer safety.** Appends to the signed audit ledger and the
+  read-modify-write paths of the approval store (`create` / `decide` / `consume`)
+  now take an exclusive OS file lock (`fcntl` on POSIX, `msvcrt` on Windows; no
+  new dependency), so multiple agents writing to the same delego home can no
+  longer fork the hash chain or interleave a torn record. This closes write
+  *integrity* under concurrency; rate-limit *exactness* (the count→execute→append
+  window) still requires the planned single-writer daemon.
+
+### Added
+- Concurrency regression tests: chain stays valid + contiguous under parallel
+  appends; concurrent approval creates land intact; concurrent decisions converge
+  to a single terminal status (`tests/test_concurrency.py`).
+
+### Changed
+- `__protocol_version__` is now the two-component `"0.2"` (protocol/spec versions
+  are `0.x`; the package is `0.x.y`). README status/limitations updated.
+
 ## [0.2.0] — 2026-06-04
 
 First public release on PyPI. (0.1.0 was the initial implementation and was never
@@ -76,5 +99,6 @@ published.) Implements wire-protocol **0.2.0**; see
   a FastMCP server exposing propose / resolve / audit_tail / show_policy.
 - `NullBroker` (default; holds no credentials) and an `HTTPProxyBroker` sketch.
 
-[Unreleased]: https://github.com/Delego-Dev/delego/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/Delego-Dev/delego/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/Delego-Dev/delego/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/Delego-Dev/delego/releases/tag/v0.2.0

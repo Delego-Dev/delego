@@ -20,3 +20,6 @@ approvals.jsonl
 
 # Claude Code local guidance (not part of the public repo)
 CLAUDE.md
+
+# delego lock sidecars
+*.lock

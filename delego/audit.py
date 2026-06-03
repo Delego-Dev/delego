@@ -27,6 +27,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
     Ed25519PublicKey,
 )
 
+from ._locking import file_lock
 from .util import canonical_json, now_iso, sha256_hex
 
 # Fields that make up the signed payload, in a fixed set. ``entry_hash`` and
@@ -116,30 +117,33 @@ class AuditLog:
         approval_id: Optional[str] = None,
     ) -> dict:
         self._load_keys()
-        last = self._last()
-        seq = (last["seq"] + 1) if last else 0
-        prev_hash = last["entry_hash"] if last else GENESIS
+        # Lock the whole read-modify-write: another writer must not slip a
+        # receipt between our `_last()` and our append, or the chain forks.
+        with file_lock(self.path):
+            last = self._last()
+            seq = (last["seq"] + 1) if last else 0
+            prev_hash = last["entry_hash"] if last else GENESIS
 
-        payload = {
-            "seq": seq,
-            "ts": now_iso(),
-            "phase": phase,
-            "outcome": outcome,
-            "rule": rule,
-            "reasons": reasons,
-            "intent_hash": intent_hash,
-            "action_fingerprint": action_fingerprint,
-            "action_summary": action_summary,
-            "approval_id": approval_id,
-            "prev_hash": prev_hash,
-        }
-        entry_hash = sha256_hex(canonical_json(payload))
-        signature = self._priv.sign(entry_hash.encode("utf-8")).hex()
-        entry = {**payload, "entry_hash": entry_hash, "signature": signature}
+            payload = {
+                "seq": seq,
+                "ts": now_iso(),
+                "phase": phase,
+                "outcome": outcome,
+                "rule": rule,
+                "reasons": reasons,
+                "intent_hash": intent_hash,
+                "action_fingerprint": action_fingerprint,
+                "action_summary": action_summary,
+                "approval_id": approval_id,
+                "prev_hash": prev_hash,
+            }
+            entry_hash = sha256_hex(canonical_json(payload))
+            signature = self._priv.sign(entry_hash.encode("utf-8")).hex()
+            entry = {**payload, "entry_hash": entry_hash, "signature": signature}
 
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        with open(self.path, "a", encoding="utf-8") as f:
-            f.write(json.dumps(entry) + "\n")
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            with open(self.path, "a", encoding="utf-8") as f:
+                f.write(json.dumps(entry) + "\n")
         return entry
 
     # -- verify ----------------------------------------------------------- #
