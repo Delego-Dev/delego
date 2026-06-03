@@ -148,7 +148,10 @@ def _check_constraints(rule: Rule, action: ProposedAction, audit) -> tuple[bool,
         reasons.append(f"allow_list: {fieldname}={val!r} permitted")
 
     rate_limit = c.get("rate_limit")
-    if rate_limit and audit is not None:
+    if rate_limit:
+        if audit is None:
+            # A rate limit we cannot evaluate must not silently pass (fail-closed).
+            return False, ["rate_limit: no audit log available to enforce the limit"]
         per = rate_limit.get("per", "hour")
         window = {"minute": 60, "hour": 3600, "day": 86400}.get(per, 3600)
         cap = int(rate_limit.get("max", 0))

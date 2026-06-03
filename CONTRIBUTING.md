@@ -1,8 +1,8 @@
 # Contributing to delego
 
 Thanks for your interest in delego — a policy & audit firewall for agent
-actions. Please read [CLAUDE.md](CLAUDE.md) before making changes: it documents
-the design and, above all, the **invariants that must not be broken**.
+actions. Please read [ARCHITECTURE.md](ARCHITECTURE.md) before making changes: it
+documents the design and, above all, the **invariants that must not be broken**.
 
 ## Design invariants (do not violate)
 
@@ -47,10 +47,51 @@ behaviour change must keep the demo green and add or adjust tests to match.
 
 ## Pull requests
 
+- **Fork the repository** and open the PR from a branch in your fork; direct
+  pushes are not accepted.
 - Keep changes small and focused; explain the *why*.
 - Re-run `python examples/demo.py` and `pytest` before submitting.
 - Update `README.md`, `CHANGELOG.md`, and the tests alongside any behaviour change.
 - Confirm you have not weakened any invariant above.
+- Fill in the pull-request template completely, including the AI-assistance
+  disclosure (below).
+
+## Tests are required
+
+Every behaviour or feature change MUST ship with tests that pin the new
+behaviour — a regression test for a fix, a scenario/guard test for a feature
+(`tests/test_scenarios.py`, `tests/test_guards.py`). A PR that changes behaviour
+without tests will not be merged; if you believe a change genuinely needs none
+(pure docs, comments), say so explicitly in the PR. CI runs the suite and the
+demo on Python 3.10–3.12.
+
+## The spec leads this implementation
+
+The wire protocol is defined in
+[Delego-Dev/specification](https://github.com/Delego-Dev/specification), and the
+spec **leads** this code: a normative behaviour is specified there first, then
+implemented here. A change to authorization, the audit chain, fingerprinting, or
+approval semantics should land in the spec (with regenerated CTK vectors) before
+or alongside the implementation. This repo exposes `delego.__protocol_version__`
+(the highest protocol version it implements); it MUST stay ≤ the spec's version,
+which the spec repo's `conformance.py` enforces by replaying the CTK vectors
+against this reference.
+
+## AI-assisted contributions
+
+AI coding assistants are welcome tools, but AI-generated or AI-assisted
+contributions to a security tool carry extra risk, so:
+
+- **Disclose it.** The PR template has a required field for whether and how AI was
+  used. Be honest and specific.
+- **Expect stricter review.** AI-assisted PRs — especially ones touching the
+  decision/audit core or an invariant — receive closer scrutiny and may take
+  longer to merge. Unreviewed, bulk-generated PRs will be closed.
+- **You are accountable.** The human author is responsible for every line: that it
+  is correct, tested, and weakens no invariant or security property. "The model
+  wrote it" is not a defence.
+- **Process is the same — fork, template, tests, green CI.** No fast path for AI
+  output.
 
 ## Releasing (maintainers)
 

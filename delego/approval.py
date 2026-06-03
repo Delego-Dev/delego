@@ -22,6 +22,7 @@ from .util import now_iso
 STATUS_PENDING = "pending"
 STATUS_APPROVED = "approved"
 STATUS_DENIED = "denied"
+STATUS_CONSUMED = "consumed"  # approved AND already released — single-use, never again
 
 
 class ApprovalStore:
@@ -43,7 +44,15 @@ class ApprovalStore:
         with open(self.path, "a", encoding="utf-8") as f:
             f.write(json.dumps(rec) + "\n")
 
-    def create(self, *, action_fingerprint: str, intent_hash: str, summary: str) -> str:
+    def create(
+        self,
+        *,
+        action_fingerprint: str,
+        intent_hash: str,
+        summary: str,
+        instruction: str = "",
+        rule: Optional[str] = None,
+    ) -> str:
         approval_id = "apr_" + secrets.token_hex(6)
         self._append(
             {
@@ -51,6 +60,11 @@ class ApprovalStore:
                 "status": STATUS_PENDING,
                 "action_fingerprint": action_fingerprint,
                 "intent_hash": intent_hash,
+                # The human-readable instruction (so the approver sees *what* they
+                # are authorising, not just its hash) and the rule that parked it
+                # (so the execution receipt can attribute the allow correctly).
+                "instruction": instruction,
+                "rule": rule,
                 "summary": summary,
                 "created_at": now_iso(),
                 "decided_at": None,
@@ -74,6 +88,19 @@ class ApprovalStore:
             "decided_at": now_iso(),
             "approver": approver,
         }
+        self._append(updated)
+        return updated
+
+    def consume(self, approval_id: str) -> Optional[dict]:
+        """Mark an approved action as released. Single-use: an approval can only
+        ever execute once, so a replayed ``resolve`` of the same approved id is
+        refused. Transitions ``approved`` -> ``consumed``; a no-op otherwise."""
+        rec = self.get(approval_id)
+        if rec is None:
+            return None
+        if rec["status"] != STATUS_APPROVED:
+            return rec  # only an approved action can be consumed
+        updated = {**rec, "status": STATUS_CONSUMED, "consumed_at": now_iso()}
         self._append(updated)
         return updated
 

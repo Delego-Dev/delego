@@ -44,9 +44,9 @@ def main() -> None:
     banner("1. ALLOW — read own accounts (matches an allow rule)")
     d = fw.propose(
         ProposedAction(
-            instruction="check my balance",
+            instruction="read my account details",
             method="GET",
-            url="https://api.examplebank.in/accounts/me",
+            url="https://api.example.com/accounts/me",
         )
     )
     show(d)
@@ -54,43 +54,43 @@ def main() -> None:
     banner("2. DENY (forbidden) — attempt to change permissions")
     d = fw.propose(
         ProposedAction(
-            instruction="share my statements with my accountant",
+            instruction="share my account with a teammate",
             method="POST",
-            url="https://api.examplebank.in/accounts/me/permissions",
-            params={"grant": "accountant@example.com"},
+            url="https://api.example.com/accounts/me/permissions",
+            params={"grant": "teammate@example.com"},
         )
     )
     show(d)
 
-    banner("3. DENY (constraint) — transfer above the cap")
+    banner("3. DENY (constraint) — order above the cap")
     d = fw.propose(
         ProposedAction(
-            instruction="pay the contractor",
+            instruction="place a large order",
             method="POST",
-            url="https://api.examplebank.in/transfer",
-            params={"amount": 50000, "currency": "INR", "beneficiary_type": "domestic"},
+            url="https://api.example.com/orders",
+            params={"amount": 50000, "currency": "USD", "destination": "internal"},
         )
     )
     show(d)
 
-    banner("4. NEEDS APPROVAL — small domestic transfer (within cap)")
-    transfer = ProposedAction(
-        instruction="pay my electricity bill",
+    banner("4. NEEDS APPROVAL — small order (within cap)")
+    order = ProposedAction(
+        instruction="place a small order",
         method="POST",
-        url="https://api.examplebank.in/transfer",
-        params={"amount": 2400, "currency": "INR", "beneficiary_type": "domestic"},
+        url="https://api.example.com/orders",
+        params={"amount": 2400, "currency": "USD", "destination": "internal"},
     )
-    d = fw.propose(transfer)
+    d = fw.propose(order)
     show(d)
     approval_id = d.approval_id
 
     banner("5. CONFUSED-DEPUTY GUARD — reuse the approval for a different action")
-    # A prompt injection swaps the beneficiary/amount but reuses the approval id.
+    # A prompt injection adds a recipient but reuses the approval id.
     tampered = ProposedAction(
-        instruction="pay my electricity bill",
+        instruction="place a small order",
         method="POST",
-        url="https://api.examplebank.in/transfer",
-        params={"amount": 2400, "currency": "INR", "beneficiary_type": "domestic", "to": "attacker"},
+        url="https://api.example.com/orders",
+        params={"amount": 2400, "currency": "USD", "destination": "internal", "recipient": "attacker"},
     )
     d = fw.resolve(approval_id, tampered)
     show(d)
@@ -98,7 +98,7 @@ def main() -> None:
 
     banner("6. RESOLVE — human approves, then the ORIGINAL action completes")
     fw.approvals.decide(approval_id, approved=True, approver="koishore")
-    d = fw.resolve(approval_id, transfer)
+    d = fw.resolve(approval_id, order)
     show(d)
 
     banner("7. AUDIT — verify the receipt chain")

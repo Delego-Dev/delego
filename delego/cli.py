@@ -82,6 +82,8 @@ def pending(paths: Paths) -> None:
         return
     for rec in items:
         click.echo(f"{rec['id']}  {rec['summary']}")
+        if rec.get("instruction"):
+            click.echo(f"    instruction: {rec['instruction']!r}")
         click.echo(f"    requested {rec['created_at']}")
 
 

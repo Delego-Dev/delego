@@ -6,7 +6,31 @@ adhere to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security
+- **Single-use approvals.** A human approval now releases its action exactly
+  once: `engine.resolve` consumes the approval before executing, so a replayed
+  `resolve` of an already-used approval is refused (`approved` → `consumed`).
+  Previously one approval could be resolved repeatedly, executing the same action
+  N times.
+- **Approvals are bound to the instruction, not only the action fingerprint.**
+  `resolve` re-checks the approval's `intent_hash`, so the same action carried
+  under a different claimed instruction is denied.
+- **Rate limits fail closed when unevaluable.** A `rate_limit` constraint with no
+  audit log to read now denies instead of silently passing.
+- **`rate_limit` on `needs_approval` rules now counts.** Approved-then-executed
+  actions carry their originating rule on the execution receipt, so the
+  ledger-backed counter attributes them correctly (previously `rule=None`, making
+  the cap a no-op).
+- **`verify()` is robust to structural tampering.** Removing a field from a
+  receipt, or corrupting a line, is now reported as a problem instead of crashing
+  verification.
+
 ### Added
+- Regression tests for the above: single-use approvals, intent-bound resolve,
+  fail-closed rate limit without an audit log, and crash-free `verify()` on a
+  removed field (`tests/test_guards.py`).
+- `delego pending` now prints the originating instruction for each parked action,
+  so the human approver sees *what* they are authorising, not just the request.
 - pytest regression suite encoding the eight demo scenarios plus invariant
   guards, with an isolated-firewall fixture (`tests/`).
 - GitHub Actions CI running the suite **and** the demo on Python 3.10–3.12

@@ -55,12 +55,15 @@ existing broker layer rather than competing with it.
 ## Key properties
 
 1. **Intent binding** — every action carries a hash of the original human
-   instruction, recorded in the audit ledger.
-2. **Action-bound approval** — a human "yes" is bound to one exact action
-   fingerprint. An agent that gets approval for action A cannot reuse it to run
-   action B (the confused-deputy guard).
+   instruction, recorded in the audit ledger and re-checked at resolve time, so
+   an approval cannot be re-pointed at a different claimed instruction.
+2. **Action-bound, single-use approval** — a human "yes" is bound to one exact
+   action fingerprint. An agent that gets approval for action A cannot reuse it
+   to run action B (the confused-deputy guard), and cannot replay the *same*
+   approval to run action A twice — an approval releases its action exactly once.
 3. **Tamper-evident audit** — receipts form an Ed25519-signed hash chain.
-   Editing or deleting any past receipt breaks verification.
+   Editing, deleting a receipt, or removing a field from one breaks
+   verification, which reports the fault rather than trusting the ledger.
 
 ## Quickstart
 
@@ -144,12 +147,12 @@ constraints fail becomes a deny (fail-closed). See `policy.example.yaml`.
 
 ```yaml
 rules:
-  - name: small-domestic-transfer
+  - name: place-order
     decision: needs_approval
-    match: { method: POST, host: api.examplebank.in, path: /transfer }
+    match: { method: POST, host: api.example.com, path: /orders }
     constraints:
-      amount:     { field: amount, max: 5000, currency: INR }
-      allow_list: { field: beneficiary_type, in: [domestic] }
+      amount:     { field: amount, max: 5000, currency: USD }
+      allow_list: { field: destination, in: [internal] }
 ```
 
 Supported constraints in v0.1: `amount` (cap + currency), `allow_list`
