@@ -65,7 +65,7 @@ implemented protocol and `y` the iteration.
 ## [0.2.0] — 2026-06-04
 
 First public release on PyPI. (0.1.0 was the initial implementation and was never
-published.) Implements wire-protocol **0.2.0**; see
+published.) Implements wire-protocol **0.2**; see
 [`__protocol_version__`](delego/__init__.py).
 
 ### Security
