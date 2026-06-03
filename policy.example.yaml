@@ -1,0 +1,55 @@
+# Example policy — a BFSI-flavoured starting point.
+#
+# Evaluation order: forbidden (hard deny) -> rules (first match wins) -> default.
+# A matched rule whose constraints fail becomes a DENY (fail-closed).
+#
+# `match` supports: method (str or list), host, path (glob), path_contains.
+# `params` referenced by constraints are the fields the agent declares on the
+# action (e.g. amount, currency, beneficiary_type).
+
+version: 1
+default: deny # anything not explicitly allowed is refused
+
+forbidden:
+  - name: no-access-control-changes
+    description: Agents may never modify permissions or sharing
+    match:
+      path_contains: /permissions
+
+  - name: no-withdrawals
+    description: Agents may never withdraw funds
+    match:
+      method: POST
+      path: /withdraw
+
+rules:
+  - name: read-accounts
+    description: Read own account data
+    decision: allow
+    match:
+      method: GET
+      host: api.examplebank.in
+      path: /accounts/**
+    constraints:
+      rate_limit: { max: 50, per: hour }
+
+  - name: read-transactions
+    description: Read own transactions (read-only, rate-limited)
+    decision: allow
+    match:
+      method: GET
+      host: api.examplebank.in
+      path: /transactions/**
+    constraints:
+      rate_limit: { max: 50, per: hour }
+
+  - name: small-domestic-transfer
+    description: Small domestic INR transfer — always needs human approval
+    decision: needs_approval
+    match:
+      method: POST
+      host: api.examplebank.in
+      path: /transfer
+    constraints:
+      amount: { field: amount, max: 5000, currency: INR }
+      allow_list: { field: beneficiary_type, in: [domestic] }

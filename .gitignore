@@ -1,0 +1,19 @@
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+build/
+dist/
+.venv/
+venv/
+
+# local delego state (keys, ledger, approvals) — never commit
+.delego/
+*.pem
+*.pub
+audit.log.jsonl
+approvals.jsonl
