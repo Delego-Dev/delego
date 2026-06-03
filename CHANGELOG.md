@@ -10,6 +10,22 @@ adhere to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 Protocol unchanged (still 0.2).
 
+### Security
+- **Fail-open in the `amount` constraint fixed.** Amounts are now parsed as
+  `Decimal` and **non-finite (`nan`/`inf`), negative, and non-numeric values are
+  denied**. Previously `float('nan') > max` is `False`, so an `amount: "nan"`
+  slipped past any cap. Also fixes float rounding on money comparisons.
+- **Honest audit-tamper docs + a rollback hook.** `verify(expected_head=(seq, hash))`
+  lets you anchor the ledger head externally to detect **tail truncation**, which
+  hash-chaining alone can't (a truncated prefix verifies clean). README/SECURITY
+  now state this and the local-signing-key limit plainly rather than overclaiming.
+
+### Changed
+- **`mcp` is now an optional extra.** `pip install delego` no longer pulls in
+  `mcp` and its dependency tree (which can conflict with a system PyJWT); install
+  the server with `pip install "delego[mcp]"`. Library/CLI users get a lean core.
+- Ship a `py.typed` marker so downstream type checkers use delego's type hints.
+
 ### Added
 - **`HTTPProxyBroker` is now a real adapter** (was a sketch): it forwards an
   authorised action — with its `intent_hash` and `action_fingerprint` for

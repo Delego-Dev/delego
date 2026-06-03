@@ -228,3 +228,54 @@ def test_intent_hash_ignores_surrounding_whitespace():
         params={"amount": 2400, "currency": "USD", "destination": "internal"},
     )
     assert spaced.intent_hash == _small_order().intent_hash
+
+
+# --------------------------------------------------------------------------- #
+# amount constraint is fail-closed against non-finite / negative / non-numeric
+# --------------------------------------------------------------------------- #
+def test_amount_rejects_non_finite_negative_and_bool(firewall):
+    # `float('nan') > cap` is False, so a NaN amount used to *pass* the cap.
+    for bad in ["nan", "inf", "-inf", -100, True, "not-a-number"]:
+        d = firewall.propose(
+            ProposedAction(
+                instruction="place a small order",
+                method="POST",
+                url="https://api.example.com/orders",
+                params={"amount": bad, "currency": "USD", "destination": "internal"},
+            )
+        )
+        assert d.outcome == OUTCOME_DENY, f"amount={bad!r} should be denied, got {d.outcome}"
+    # a normal value still parks for approval (the cap itself still works)
+    ok = firewall.propose(
+        ProposedAction(
+            instruction="place a small order",
+            method="POST",
+            url="https://api.example.com/orders",
+            params={"amount": 2400, "currency": "USD", "destination": "internal"},
+        )
+    )
+    assert ok.outcome == OUTCOME_APPROVAL
+
+
+# --------------------------------------------------------------------------- #
+# verify(expected_head=...) catches tail-truncation that the chain alone can't
+# --------------------------------------------------------------------------- #
+def test_verify_expected_head_detects_truncation(firewall):
+    h = "0" * 64
+    for i in range(2):
+        last = firewall.audit.append(
+            phase="decision", outcome="deny", rule=None, reasons=[f"r{i}"],
+            intent_hash=h, action_fingerprint=h, action_summary=f"a{i}", approval_id=None,
+        )
+    head = (last["seq"], last["entry_hash"])
+    assert firewall.audit.verify(expected_head=head)[0] is True
+
+    # drop the last receipt — a tail-truncated ledger is a valid prefix...
+    lines = firewall.audit.path.read_text(encoding="utf-8").splitlines()
+    firewall.audit.path.write_text("\n".join(lines[:-1]) + "\n", encoding="utf-8")
+    assert firewall.audit.verify()[0] is True  # ...so it still verifies on its own
+
+    # ...but fails against the externally-anchored head.
+    ok, problems = firewall.audit.verify(expected_head=head)
+    assert ok is False
+    assert any("truncated or rolled back" in p for p in problems)

@@ -20,11 +20,13 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 
+# Core stays light and auditable (this is a security tool). The MCP server is an
+# optional extra — `pip install "delego[mcp]"` — so library/CLI users don't pull
+# in `mcp` and its dependency tree (which can conflict with a system PyJWT).
 dependencies = [
     "pyyaml>=6.0",
     "cryptography>=42.0",
     "click>=8.1",
-    "mcp>=1.2.0",
 ]
 
 [project.urls]
@@ -38,6 +40,7 @@ delego = "delego.cli:cli"
 delego-mcp = "delego.mcp_server:main"
 
 [project.optional-dependencies]
+mcp = ["mcp>=1.2.0"]
 dev = ["pytest>=8.0"]
 
 [build-system]

@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import fnmatch
 from dataclasses import dataclass, field
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, Optional
 
@@ -168,10 +169,20 @@ def _check_amount(spec: dict[str, Any], action: ProposedAction) -> tuple[bool, s
     raw = action.params.get(fieldname)
     if raw is None:
         return False, f"amount: action is missing field '{fieldname}'"
-    try:
-        value = float(raw)
-    except (TypeError, ValueError):
+    # Decimal, not float: avoids money rounding error, and lets us reject the
+    # non-finite values that silently defeat a float cap (``float('nan') > cap``
+    # is False, so a NaN amount would otherwise *pass* the limit — fail-open).
+    # ``bool`` is an int subclass; exclude it so ``amount: true`` isn't "numeric".
+    if isinstance(raw, bool):
         return False, f"amount: field '{fieldname}'={raw!r} is not numeric"
+    try:
+        value = Decimal(str(raw))
+    except (InvalidOperation, TypeError, ValueError):
+        return False, f"amount: field '{fieldname}'={raw!r} is not numeric"
+    if not value.is_finite():
+        return False, f"amount: field '{fieldname}'={raw!r} is not a finite number"
+    if value < 0:
+        return False, f"amount: field '{fieldname}'={raw!r} must not be negative"
 
     currency = spec.get("currency")
     if currency is not None:
@@ -180,8 +191,13 @@ def _check_amount(spec: dict[str, Any], action: ProposedAction) -> tuple[bool, s
             return False, f"amount: currency {actual!r} != required {currency!r}"
 
     cap = spec.get("max")
-    if cap is not None and value > float(cap):
-        suffix = f" {currency}" if currency else ""
-        return False, f"amount: {value:g} exceeds max {cap:g}{suffix}"
+    if cap is not None:
+        try:
+            cap_value = Decimal(str(cap))
+        except (InvalidOperation, TypeError, ValueError):
+            return False, f"amount: policy max {cap!r} is not numeric"
+        if value > cap_value:
+            suffix = f" {currency}" if currency else ""
+            return False, f"amount: {value:g} exceeds max {cap_value:g}{suffix}"
 
     return True, f"amount: {value:g} within max {spec.get('max')}"

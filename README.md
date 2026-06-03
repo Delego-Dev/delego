@@ -62,13 +62,19 @@ existing broker layer rather than competing with it.
    to run action B (the confused-deputy guard), and cannot replay the *same*
    approval to run action A twice — an approval releases its action exactly once.
 3. **Tamper-evident audit** — receipts form an Ed25519-signed hash chain.
-   Editing, deleting a receipt, or removing a field from one breaks
+   Editing, reordering, removing a receipt, or dropping a field breaks
    verification, which reports the fault rather than trusting the ledger.
+   *Caveats (be precise):* hash-chaining does **not** catch truncation of the
+   most recent receipts (a tail-truncated prefix verifies clean), and the local
+   signing key protects nothing against a host compromise. For rollback
+   detection, anchor the head externally and pass it to `verify(expected_head=…)`;
+   for key safety, use an HSM/KMS. See [SECURITY.md](SECURITY.md).
 
 ## Quickstart
 
 ```bash
-pip install delego        # installs the `delego` CLI and the `delego-mcp` server
+pip install delego          # the `delego` library + CLI
+# pip install "delego[mcp]" # add the `delego-mcp` server (MCP is an optional extra)
 delego init               # creates ~/.delego with signing keys and an example policy
 delego policy             # inspect the active policy
 ```
@@ -97,7 +103,8 @@ delego verify            # check the audit chain (hashes, linkage, signatures)
 
 ### Agent side (MCP) — wiring into Claude Code
 
-delego ships an MCP server (`delego_mcp`) over stdio. Register it in your MCP
+delego ships an MCP server (`delego_mcp`) over stdio — install it with the `mcp`
+extra: `pip install "delego[mcp]"`. Register it in your MCP
 config (for Claude Code, `.mcp.json` at the project root) so the agent can
 propose actions. Set `DELEGO_HOME` to keep the policy, signing keys, and ledger
 project-scoped under `.claude/.delego`:
