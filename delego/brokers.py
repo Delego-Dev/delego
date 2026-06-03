@@ -50,23 +50,69 @@ class NullBroker:
 
 
 class HTTPProxyBroker:
-    """Sketch of a real adapter — NOT wired up in v0.1.
+    """Forward an authorised action to an external credential **gateway**.
 
-    In production this points at a running credential broker (for example
-    OneCLI's gateway on ``localhost:10255``, or an Agent Vault proxy). The broker
-    matches a credential by host/path, injects it, and forwards the request. The
-    firewall has already decided the action is allowed; this adapter only carries
-    it through the component that actually holds the secret.
+    This is the real, dependency-light way to wire delego to a credential broker
+    that holds the secret — OneCLI's local gateway, an Agent Vault proxy, or your
+    own. The gateway matches a credential by host/path, injects it, forwards the
+    request upstream, and returns the response. delego only carries the
+    already-authorised action across to that component.
+
+    **Trust model (invariant: delego holds no credentials).** The upstream secret
+    lives in the *gateway*, never here. ``gateway_headers`` authenticate delego to
+    the *local gateway* (e.g. a loopback token) — they are **not** the brokered
+    upstream credential, and MUST NOT be one.
+
+    It POSTs ``{method, url, params, intent_hash, action_fingerprint}`` as JSON to
+    ``gateway_url``. Sending the fingerprint lets a gateway re-verify the action it
+    is about to perform (and aligns with the forthcoming signed authorization
+    token, spec §9). The gateway's JSON response is returned under ``response``.
     """
 
     name = "http_proxy"
 
-    def __init__(self, proxy_url: str) -> None:
-        self.proxy_url = proxy_url
+    def __init__(
+        self,
+        gateway_url: str,
+        *,
+        timeout: float = 15.0,
+        gateway_headers: dict[str, str] | None = None,
+    ) -> None:
+        self.gateway_url = gateway_url
+        self.timeout = timeout
+        self._headers = {"content-type": "application/json", **(gateway_headers or {})}
 
     def execute(self, action: ProposedAction) -> dict[str, Any]:
-        raise NotImplementedError(
-            "Wire this to your credential broker. Route the request through "
-            f"{self.proxy_url!r}; the broker injects the credential and forwards "
-            "upstream. The firewall has already authorised this action."
+        import json
+        import urllib.error
+        import urllib.request
+
+        payload = json.dumps(
+            {
+                "method": action.method.upper(),
+                "url": action.url,
+                "params": action.params,
+                "intent_hash": action.intent_hash,
+                "action_fingerprint": action.fingerprint,
+            }
+        ).encode("utf-8")
+        req = urllib.request.Request(
+            self.gateway_url, data=payload, method="POST", headers=self._headers
         )
+        try:
+            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
+                status = resp.status
+                body = resp.read().decode("utf-8")
+        except urllib.error.HTTPError as e:  # gateway refused / upstream error
+            status = e.code
+            body = e.read().decode("utf-8", "replace")
+        try:
+            parsed: Any = json.loads(body) if body else None
+        except json.JSONDecodeError:
+            parsed = {"raw": body[:1000]}
+        return {
+            "broker": self.name,
+            "gateway": self.gateway_url,
+            "gateway_status": status,
+            "response": parsed,
+        }

@@ -6,6 +6,23 @@ adhere to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.2] — 2026-06-04
+
+Protocol unchanged (still 0.2).
+
+### Added
+- **`HTTPProxyBroker` is now a real adapter** (was a sketch): it forwards an
+  authorised action — with its `intent_hash` and `action_fingerprint` for
+  gateway-side re-verification — to an external credential gateway (OneCLI /
+  vault / proxy) over stdlib HTTP, and returns the gateway's response. The
+  upstream secret stays in the gateway; it never enters delego (`delego/brokers.py`,
+  `tests/test_broker.py`).
+- **`ROADMAP.md`** — a public, ordered plan (broker adapters → approval surfaces →
+  signed authorization token → single-writer daemon) with "where to help".
+- README **"Build on delego"** section linking the
+  [sample app](https://github.com/Delego-Dev/sample-app) and the broker
+  extension point.
+
 ## [0.2.1] — 2026-06-04
 
 Protocol unchanged (still 0.2). Package versions are `0.x.y` where `x` is the
@@ -99,6 +116,7 @@ published.) Implements wire-protocol **0.2.0**; see
   a FastMCP server exposing propose / resolve / audit_tail / show_policy.
 - `NullBroker` (default; holds no credentials) and an `HTTPProxyBroker` sketch.
 
-[Unreleased]: https://github.com/Delego-Dev/delego/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/Delego-Dev/delego/compare/v0.2.2...HEAD
+[0.2.2]: https://github.com/Delego-Dev/delego/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/Delego-Dev/delego/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/Delego-Dev/delego/releases/tag/v0.2.0

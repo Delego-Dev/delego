@@ -158,6 +158,33 @@ rules:
 Supported constraints: `amount` (cap + currency), `allow_list`
 (field-in-set), `rate_limit` (max per minute/hour/day, counted from the ledger).
 
+## Build on delego
+
+Three ways to use it, lowest friction first:
+
+- **As an MCP server** — `delego init`, add the `delego-mcp` server to your MCP
+  config, and your agent proposes actions instead of executing them. No code.
+- **As a library** — `pip install delego`, write a policy + a `BrokerAdapter`, and
+  call `fw.propose(...)` in your tool-call path.
+- **Behind a service** — wrap the `Firewall` in an HTTP API so many agents share
+  one decision point and one audit chain.
+
+The one extension point is the **broker** — where your credential lives and the
+authorised action actually runs. delego never holds the secret:
+
+- `NullBroker` (default) — simulates execution; for demos and tests.
+- `HTTPProxyBroker(gateway_url)` — forwards the authorised action to an external
+  credential gateway (OneCLI / vault / proxy) that injects the secret upstream.
+- Your own — implement `execute(action) -> dict` against the `BrokerAdapter`
+  protocol in [`delego/brokers.py`](delego/brokers.py).
+
+▶ **[Delego-Dev/sample-app](https://github.com/Delego-Dev/sample-app)** — a
+FastAPI service built on the published package, with the full
+propose → approve → resolve loop and a copy-paste curl walkthrough. The best
+starting point for building your own.
+
+See **[ROADMAP.md](ROADMAP.md)** for where delego is going and where to help.
+
 ## Status
 
 - **Implemented (protocol 0.2):** the policy engine, intent hashing, action
