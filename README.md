@@ -50,7 +50,7 @@ existing broker layer rather than competing with it.
   upstream; the decision that gates a credential is made outside the stochastic
   loop, so an injection can't talk its way past it.
 
-## Three properties it gives you
+## Key properties
 
 1. **Intent binding** — every action carries a hash of the original human
    instruction, recorded in the audit ledger.
@@ -63,15 +63,22 @@ existing broker layer rather than competing with it.
 ## Quickstart
 
 ```bash
-pip install -e ".[dev]"          # editable install with test deps
-delego init                      # creates ~/.delego, signing keys, example policy
-python examples/demo.py          # see the whole loop, no agent or live service needed
-pytest                           # the regression suite (CI runs it on 3.10–3.12)
+pip install delego        # installs the `delego` CLI and the `delego-mcp` server
+delego init               # creates ~/.delego with signing keys and an example policy
+delego policy             # inspect the active policy
 ```
 
-The demo walks: an allowed read, a forbidden deny, a deny on an over-cap
-transfer, an approval flow, the confused-deputy guard refusing a substituted
-action, and audit-chain tamper detection.
+To run the full loop end-to-end from a clone — an allowed read, a forbidden deny,
+an over-cap deny, an approval flow, the confused-deputy guard refusing a
+substituted action, and audit-chain tamper detection (no agent or live service
+needed):
+
+```bash
+git clone https://github.com/Delego-Dev/delego && cd delego
+pip install -e ".[dev]"
+python examples/demo.py
+pytest
+```
 
 ### Human side (CLI)
 
@@ -146,30 +153,21 @@ rules:
 Supported constraints in v0.1: `amount` (cap + currency), `allow_list`
 (field-in-set), `rate_limit` (max per minute/hour/day, counted from the ledger).
 
-## What's real vs. stubbed in v0.1
+## Status (v0.1)
 
-- **Real:** policy engine, intent hashing, action fingerprinting, the
-  confused-deputy guard, the human approval queue, and the signed/chained audit
-  ledger with verification.
+- **Implemented:** the policy engine, intent hashing, action fingerprinting, the
+  confused-deputy guard, the human approval queue, and the signed, hash-chained
+  audit ledger with verification.
 - **Stubbed:** the broker. The default `NullBroker` holds no credentials and
-  makes no real request — it records what *would* be sent. Replace it with a real
-  `BrokerAdapter` (see `HTTPProxyBroker` sketch in `delego/brokers.py`) to act on
-  live services.
-- **Not yet:** an always-on daemon with a socket (v0.1 uses file-backed state
-  shared by the CLI and MCP server) and a non-MCP HTTP surface.
-- **Known limits (v0.1):** file-backed state is **not safe under concurrent
-  writers** — a single-writer daemon is the fix (roadmap); run one writer at a
-  time meanwhile. Path globbing is coarse (`**` and `*` collapse).
-
-## Roadmap
-
-- v0.2 — real broker adapters (OneCLI gateway, Agent Vault, Browser Use); a
-  FastAPI daemon so non-MCP clients can use it; richer path matching.
-- v0.3 — a signed authorisation token the broker can require (so the broker
-  only injects when delego has authorised the exact action), converging with
-  RFC 8693 token-exchange downscoping and the AARM action-runtime spec.
-- Later — a publishable wire spec and a policy library for common BFSI surfaces.
+  makes no real request — it records what *would* be sent. Swap in a real
+  `BrokerAdapter` (see the `HTTPProxyBroker` sketch in `delego/brokers.py`) to act
+  on live services.
+- **Not yet:** an always-on daemon (v0.1 uses file-backed state shared by the CLI
+  and MCP server) and a non-MCP HTTP surface.
+- **Known limitations:** file-backed state is not safe under concurrent writers
+  (a single-writer daemon is planned); path globbing is coarse (`**` and `*`
+  collapse).
 
 ## License
 
-Apache-2.0.
+Licensed under the [Apache License 2.0](LICENSE).
