@@ -5,7 +5,7 @@ a human decides out-of-band (via the CLI: ``delego approve <id>``). Each record
 is bound to the action's fingerprint, so an approval can only ever release the
 *exact* action it was granted for.
 
-v0.1 storage is an append-only JSONL file (last record per id wins). It's
+Storage is an append-only JSONL file (last record per id wins). It's
 deliberately simple and inspectable; a real deployment would put this behind
 the daemon with proper access control.
 """

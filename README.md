@@ -197,10 +197,10 @@ See **[ROADMAP.md](ROADMAP.md)** for where delego is going and where to help.
 - **Implemented (protocol 0.2):** the policy engine, intent hashing, action
   fingerprinting, the confused-deputy guard, intent-bound + single-use human
   approvals, and the signed, hash-chained audit ledger with verification.
-- **Stubbed:** the broker. The default `NullBroker` holds no credentials and
-  makes no real request — it records what *would* be sent. Swap in a real
-  `BrokerAdapter` (see the `HTTPProxyBroker` sketch in `delego/brokers.py`) to act
-  on live services.
+- **Brokers:** the default `NullBroker` holds no credentials and makes no real
+  request — it records what *would* be sent (for demos and tests). `HTTPProxyBroker`
+  forwards an authorised action to an external credential gateway; or write your
+  own against the `BrokerAdapter` protocol in `delego/brokers.py`.
 - **Not yet:** the authorization token (spec 0.3), an always-on daemon (state is
   file-backed and shared by the CLI and MCP server), and a non-MCP HTTP surface.
 - **Known limitations:** concurrent writes to the file-backed ledger and approval

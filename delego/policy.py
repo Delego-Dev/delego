@@ -119,7 +119,7 @@ def _matches(m: dict[str, Any], action: ProposedAction) -> bool:
 
 
 def _glob(pattern: str, path: str) -> bool:
-    # v0.1 globbing is intentionally simple: fnmatch's ``*`` already spans
+    # Globbing is intentionally simple for now: fnmatch's ``*`` already spans
     # path separators, so ``**`` and ``*`` are treated alike. Good enough for
     # host/path scoping; swap for a real path matcher if you need precision.
     return fnmatch.fnmatch(path, pattern.replace("**", "*"))
