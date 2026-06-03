@@ -28,6 +28,7 @@ _STATE_GITIGNORE = """\
 signing_key.pem
 audit.log.jsonl
 approvals.jsonl
+*.lock
 """
 
 

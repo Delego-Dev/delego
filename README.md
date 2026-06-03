@@ -18,7 +18,7 @@ asked for?*
                            └── needs_approval ──▶  human (CLI)
 ```
 
-📜 **Protocol:** delego implements the open [delego wire specification](https://github.com/Delego-Dev/specification) — canonicalization, the policy schema, the signed audit chain, and the authorization-token protocol.
+📜 **Protocol:** delego implements **protocol 0.2** of the open [delego wire specification](https://github.com/Delego-Dev/specification) — canonicalization, the policy schema, intent/fingerprint binding, and the signed audit chain. The authorization token (spec 0.3) is specified but not yet implemented.
 
 ## Why this exists
 
@@ -155,23 +155,25 @@ rules:
       allow_list: { field: destination, in: [internal] }
 ```
 
-Supported constraints in v0.1: `amount` (cap + currency), `allow_list`
+Supported constraints: `amount` (cap + currency), `allow_list`
 (field-in-set), `rate_limit` (max per minute/hour/day, counted from the ledger).
 
-## Status (v0.1)
+## Status
 
-- **Implemented:** the policy engine, intent hashing, action fingerprinting, the
-  confused-deputy guard, the human approval queue, and the signed, hash-chained
-  audit ledger with verification.
+- **Implemented (protocol 0.2):** the policy engine, intent hashing, action
+  fingerprinting, the confused-deputy guard, intent-bound + single-use human
+  approvals, and the signed, hash-chained audit ledger with verification.
 - **Stubbed:** the broker. The default `NullBroker` holds no credentials and
   makes no real request — it records what *would* be sent. Swap in a real
   `BrokerAdapter` (see the `HTTPProxyBroker` sketch in `delego/brokers.py`) to act
   on live services.
-- **Not yet:** an always-on daemon (v0.1 uses file-backed state shared by the CLI
-  and MCP server) and a non-MCP HTTP surface.
-- **Known limitations:** file-backed state is not safe under concurrent writers
-  (a single-writer daemon is planned); path globbing is coarse (`**` and `*`
-  collapse).
+- **Not yet:** the authorization token (spec 0.3), an always-on daemon (state is
+  file-backed and shared by the CLI and MCP server), and a non-MCP HTTP surface.
+- **Known limitations:** concurrent writes to the file-backed ledger and approval
+  store are serialised with an OS file lock (corruption-safe), but rate-limit
+  *exactness* under concurrency still needs the planned single-writer daemon;
+  path globbing is coarse (`**` and `*` collapse); the URL query string is not
+  part of the action fingerprint (spec 0.3).
 
 ## License
 
