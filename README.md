@@ -18,6 +18,8 @@ asked for?*
                            └── needs_approval ──▶  human (CLI)
 ```
 
+📜 **Protocol:** delego implements the open [delego wire specification](https://github.com/Delego-Dev/specification) — canonicalization, the policy schema, the signed audit chain, and the authorization-token protocol.
+
 ## Why this exists
 
 The "agent gets its own scoped credential, and never holds the user's secret
