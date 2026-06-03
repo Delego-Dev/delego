@@ -25,48 +25,48 @@ from delego.audit import GENESIS
 def _canonical_session(fw) -> str:
     """Replay the demo's scenarios 1–6 against ``fw`` (6 receipts).
 
-    Returns the approval id from the small-transfer step. Used by the
+    Returns the approval id from the small-order step. Used by the
     chain-validity and tamper tests, which need a realistic multi-action ledger.
     """
     fw.propose(
         ProposedAction(
-            instruction="check my balance",
+            instruction="read my account details",
             method="GET",
-            url="https://api.examplebank.in/accounts/me",
+            url="https://api.example.com/accounts/me",
         )
     )
     fw.propose(
         ProposedAction(
-            instruction="share my statements with my accountant",
+            instruction="share my account with a teammate",
             method="POST",
-            url="https://api.examplebank.in/accounts/me/permissions",
-            params={"grant": "accountant@example.com"},
+            url="https://api.example.com/accounts/me/permissions",
+            params={"grant": "teammate@example.com"},
         )
     )
     fw.propose(
         ProposedAction(
-            instruction="pay the contractor",
+            instruction="place a large order",
             method="POST",
-            url="https://api.examplebank.in/transfer",
-            params={"amount": 50000, "currency": "INR", "beneficiary_type": "domestic"},
+            url="https://api.example.com/orders",
+            params={"amount": 50000, "currency": "USD", "destination": "internal"},
         )
     )
-    transfer = ProposedAction(
-        instruction="pay my electricity bill",
+    order = ProposedAction(
+        instruction="place a small order",
         method="POST",
-        url="https://api.examplebank.in/transfer",
-        params={"amount": 2400, "currency": "INR", "beneficiary_type": "domestic"},
+        url="https://api.example.com/orders",
+        params={"amount": 2400, "currency": "USD", "destination": "internal"},
     )
-    d = fw.propose(transfer)
+    d = fw.propose(order)
     tampered = ProposedAction(
-        instruction="pay my electricity bill",
+        instruction="place a small order",
         method="POST",
-        url="https://api.examplebank.in/transfer",
-        params={"amount": 2400, "currency": "INR", "beneficiary_type": "domestic", "to": "attacker"},
+        url="https://api.example.com/orders",
+        params={"amount": 2400, "currency": "USD", "destination": "internal", "recipient": "attacker"},
     )
     fw.resolve(d.approval_id, tampered)
     fw.approvals.decide(d.approval_id, approved=True, approver="koishore")
-    fw.resolve(d.approval_id, transfer)
+    fw.resolve(d.approval_id, order)
     return d.approval_id
 
 
@@ -76,9 +76,9 @@ def _canonical_session(fw) -> str:
 def test_scenario_1_allow_read_accounts(firewall):
     d = firewall.propose(
         ProposedAction(
-            instruction="check my balance",
+            instruction="read my account details",
             method="GET",
-            url="https://api.examplebank.in/accounts/me",
+            url="https://api.example.com/accounts/me",
         )
     )
     assert d.outcome == OUTCOME_ALLOW
@@ -103,10 +103,10 @@ def test_scenario_1_allow_read_accounts(firewall):
 def test_scenario_2_forbidden_deny(firewall):
     d = firewall.propose(
         ProposedAction(
-            instruction="share my statements with my accountant",
+            instruction="share my account with a teammate",
             method="POST",
-            url="https://api.examplebank.in/accounts/me/permissions",
-            params={"grant": "accountant@example.com"},
+            url="https://api.example.com/accounts/me/permissions",
+            params={"grant": "teammate@example.com"},
         )
     )
     assert d.outcome == OUTCOME_DENY
@@ -117,45 +117,45 @@ def test_scenario_2_forbidden_deny(firewall):
 
 
 # --------------------------------------------------------------------------- #
-# 3. DENY (constraint) — transfer above the cap (fail-closed)
+# 3. DENY (constraint) — order above the cap (fail-closed)
 # --------------------------------------------------------------------------- #
 def test_scenario_3_constraint_deny_over_cap(firewall):
     d = firewall.propose(
         ProposedAction(
-            instruction="pay the contractor",
+            instruction="place a large order",
             method="POST",
-            url="https://api.examplebank.in/transfer",
-            params={"amount": 50000, "currency": "INR", "beneficiary_type": "domestic"},
+            url="https://api.example.com/orders",
+            params={"amount": 50000, "currency": "USD", "destination": "internal"},
         )
     )
-    # The rule matches (small-domestic-transfer) but its amount cap fails, so a
+    # The rule matches (place-order) but its amount cap fails, so a
     # matched-rule-with-failed-constraint becomes a deny — never a silent allow.
     assert d.outcome == OUTCOME_DENY
-    assert d.rule == "small-domestic-transfer"
+    assert d.rule == "place-order"
     assert d.executed is False
     assert any("exceeds max" in r for r in d.reasons)
 
 
 # --------------------------------------------------------------------------- #
-# 4. NEEDS APPROVAL — small domestic transfer (within cap)
+# 4. NEEDS APPROVAL — small order (within cap)
 # --------------------------------------------------------------------------- #
 def test_scenario_4_needs_approval(firewall):
-    transfer = ProposedAction(
-        instruction="pay my electricity bill",
+    order = ProposedAction(
+        instruction="place a small order",
         method="POST",
-        url="https://api.examplebank.in/transfer",
-        params={"amount": 2400, "currency": "INR", "beneficiary_type": "domestic"},
+        url="https://api.example.com/orders",
+        params={"amount": 2400, "currency": "USD", "destination": "internal"},
     )
-    d = firewall.propose(transfer)
+    d = firewall.propose(order)
     assert d.outcome == OUTCOME_APPROVAL
-    assert d.rule == "small-domestic-transfer"
+    assert d.rule == "place-order"
     assert d.executed is False
     assert d.approval_id is not None
     # The action is parked, pending, and bound to its exact fingerprint.
     rec = firewall.approvals.get(d.approval_id)
     assert rec is not None
     assert rec["status"] == "pending"
-    assert rec["action_fingerprint"] == transfer.fingerprint
+    assert rec["action_fingerprint"] == order.fingerprint
     assert [p["id"] for p in firewall.approvals.pending()] == [d.approval_id]
     # A decision receipt was written for the parking.
     receipts = firewall.audit.tail(999)
@@ -169,22 +169,22 @@ def test_scenario_4_needs_approval(firewall):
 # 5. CONFUSED-DEPUTY GUARD — reuse the approval for a different action
 # --------------------------------------------------------------------------- #
 def test_scenario_5_confused_deputy_guard(firewall):
-    transfer = ProposedAction(
-        instruction="pay my electricity bill",
+    order = ProposedAction(
+        instruction="place a small order",
         method="POST",
-        url="https://api.examplebank.in/transfer",
-        params={"amount": 2400, "currency": "INR", "beneficiary_type": "domestic"},
+        url="https://api.example.com/orders",
+        params={"amount": 2400, "currency": "USD", "destination": "internal"},
     )
-    d = firewall.propose(transfer)
+    d = firewall.propose(order)
 
-    # A prompt injection adds a beneficiary but reuses the approval id.
+    # A prompt injection adds a recipient but reuses the approval id.
     tampered = ProposedAction(
-        instruction="pay my electricity bill",
+        instruction="place a small order",
         method="POST",
-        url="https://api.examplebank.in/transfer",
-        params={"amount": 2400, "currency": "INR", "beneficiary_type": "domestic", "to": "attacker"},
+        url="https://api.example.com/orders",
+        params={"amount": 2400, "currency": "USD", "destination": "internal", "recipient": "attacker"},
     )
-    assert tampered.fingerprint != transfer.fingerprint
+    assert tampered.fingerprint != order.fingerprint
 
     res = firewall.resolve(d.approval_id, tampered)
     assert res.outcome == OUTCOME_DENY
@@ -205,16 +205,16 @@ def test_scenario_5_confused_deputy_guard(firewall):
 # 6. RESOLVE — human approves, then the ORIGINAL action completes
 # --------------------------------------------------------------------------- #
 def test_scenario_6_resolve_after_approval(firewall):
-    transfer = ProposedAction(
-        instruction="pay my electricity bill",
+    order = ProposedAction(
+        instruction="place a small order",
         method="POST",
-        url="https://api.examplebank.in/transfer",
-        params={"amount": 2400, "currency": "INR", "beneficiary_type": "domestic"},
+        url="https://api.example.com/orders",
+        params={"amount": 2400, "currency": "USD", "destination": "internal"},
     )
-    d = firewall.propose(transfer)
+    d = firewall.propose(order)
     firewall.approvals.decide(d.approval_id, approved=True, approver="koishore")
 
-    res = firewall.resolve(d.approval_id, transfer)
+    res = firewall.resolve(d.approval_id, order)
     assert res.outcome == OUTCOME_ALLOW
     assert res.executed is True
     assert res.result["status"] == "simulated"

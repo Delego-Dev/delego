@@ -17,3 +17,6 @@ venv/
 *.pub
 audit.log.jsonl
 approvals.jsonl
+
+# Claude Code local guidance (not part of the public repo)
+CLAUDE.md

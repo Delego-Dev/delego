@@ -18,12 +18,12 @@ from delego import (
 )
 
 
-def _small_transfer() -> ProposedAction:
+def _small_order() -> ProposedAction:
     return ProposedAction(
-        instruction="pay my electricity bill",
+        instruction="place a small order",
         method="POST",
-        url="https://api.examplebank.in/transfer",
-        params={"amount": 2400, "currency": "INR", "beneficiary_type": "domestic"},
+        url="https://api.example.com/orders",
+        params={"amount": 2400, "currency": "USD", "destination": "internal"},
     )
 
 
@@ -31,17 +31,17 @@ def _small_transfer() -> ProposedAction:
 # resolve() edge paths
 # --------------------------------------------------------------------------- #
 def test_resolve_unknown_approval_id_denies(firewall):
-    res = firewall.resolve("apr_doesnotexist", _small_transfer())
+    res = firewall.resolve("apr_doesnotexist", _small_order())
     assert res.outcome == OUTCOME_DENY
     assert res.executed is False
     assert any("unknown approval" in r for r in res.reasons)
 
 
 def test_resolve_while_pending_returns_needs_approval(firewall):
-    transfer = _small_transfer()
-    d = firewall.propose(transfer)
+    order = _small_order()
+    d = firewall.propose(order)
     # Fingerprint matches, but no human has decided yet: not executed.
-    res = firewall.resolve(d.approval_id, transfer)
+    res = firewall.resolve(d.approval_id, order)
     assert res.outcome == OUTCOME_APPROVAL
     assert res.executed is False
     assert any("awaiting" in r for r in res.reasons)
@@ -49,11 +49,11 @@ def test_resolve_while_pending_returns_needs_approval(firewall):
 
 
 def test_human_denied_then_resolve_denies(firewall):
-    transfer = _small_transfer()
-    d = firewall.propose(transfer)
+    order = _small_order()
+    d = firewall.propose(order)
     firewall.approvals.decide(d.approval_id, approved=False, approver="koishore")
 
-    res = firewall.resolve(d.approval_id, transfer)
+    res = firewall.resolve(d.approval_id, order)
     assert res.outcome == OUTCOME_DENY
     assert res.executed is False
     assert any("denied" in r for r in res.reasons)
@@ -66,16 +66,16 @@ def test_human_denied_then_resolve_denies(firewall):
 # approvals are single-use: one human "yes" releases the action exactly once
 # --------------------------------------------------------------------------- #
 def test_approval_is_single_use(firewall):
-    transfer = _small_transfer()
-    d = firewall.propose(transfer)
+    order = _small_order()
+    d = firewall.propose(order)
     firewall.approvals.decide(d.approval_id, approved=True, approver="koishore")
 
-    first = firewall.resolve(d.approval_id, transfer)
+    first = firewall.resolve(d.approval_id, order)
     assert first.outcome == OUTCOME_ALLOW
     assert first.executed is True
 
     # Replaying the same approved id must NOT execute the action again.
-    second = firewall.resolve(d.approval_id, transfer)
+    second = firewall.resolve(d.approval_id, order)
     assert second.outcome == OUTCOME_DENY
     assert second.executed is False
     assert any("already used" in r for r in second.reasons)
@@ -92,19 +92,19 @@ def test_approval_is_single_use(firewall):
 # the approval is bound to the instruction too, not just the action fingerprint
 # --------------------------------------------------------------------------- #
 def test_resolve_with_different_instruction_denies(firewall):
-    transfer = _small_transfer()
-    d = firewall.propose(transfer)
+    order = _small_order()
+    d = firewall.propose(order)
     firewall.approvals.decide(d.approval_id, approved=True, approver="koishore")
 
     # Same action (identical fingerprint) but a different claimed instruction.
     restated = ProposedAction(
         instruction="send the deposit to my landlord",
-        method=transfer.method,
-        url=transfer.url,
-        params=transfer.params,
+        method=order.method,
+        url=order.url,
+        params=order.params,
     )
-    assert restated.fingerprint == transfer.fingerprint  # the action is unchanged
-    assert restated.intent_hash != transfer.intent_hash  # but the intent is not
+    assert restated.fingerprint == order.fingerprint  # the action is unchanged
+    assert restated.intent_hash != order.intent_hash  # but the intent is not
 
     res = firewall.resolve(d.approval_id, restated)
     assert res.outcome == OUTCOME_DENY
@@ -120,9 +120,9 @@ def test_resolve_with_different_instruction_denies(firewall):
 def test_rate_limit_without_audit_fails_closed(make_firewall):
     fw = make_firewall(RATE_LIMITED_POLICY)
     action = ProposedAction(
-        instruction="check my balance",
+        instruction="read my account details",
         method="GET",
-        url="https://api.examplebank.in/accounts/me",
+        url="https://api.example.com/accounts/me",
     )
     # Evaluate the policy with no audit log available to read the counter.
     outcome, rule, reasons = fw.policy.evaluate(action, audit=None)
@@ -136,9 +136,9 @@ def test_rate_limit_without_audit_fails_closed(make_firewall):
 def test_verify_reports_removed_field_without_crashing(firewall):
     firewall.propose(
         ProposedAction(
-            instruction="check my balance",
+            instruction="read my account details",
             method="GET",
-            url="https://api.examplebank.in/accounts/me",
+            url="https://api.example.com/accounts/me",
         )
     )
     assert firewall.audit.verify()[0] is True
@@ -163,7 +163,7 @@ default: deny
 rules:
   - name: read-accounts
     decision: allow
-    match: { method: GET, host: api.examplebank.in, path: /accounts/** }
+    match: { method: GET, host: api.example.com, path: /accounts/** }
     constraints:
       rate_limit: { max: 1, per: hour }
 """
@@ -172,9 +172,9 @@ rules:
 def test_rate_limit_denies_after_cap(make_firewall):
     fw = make_firewall(RATE_LIMITED_POLICY)
     action = ProposedAction(
-        instruction="check my balance",
+        instruction="read my account details",
         method="GET",
-        url="https://api.examplebank.in/accounts/me",
+        url="https://api.example.com/accounts/me",
     )
     first = fw.propose(action)
     assert first.outcome == OUTCOME_ALLOW
@@ -189,18 +189,18 @@ def test_rate_limit_denies_after_cap(make_firewall):
 # fingerprint / intent-hash determinism (what the confused-deputy guard needs)
 # --------------------------------------------------------------------------- #
 def test_fingerprint_is_deterministic_and_param_sensitive():
-    a = _small_transfer()
-    b = _small_transfer()
+    a = _small_order()
+    b = _small_order()
     # Identical actions hash identically...
     assert a.fingerprint == b.fingerprint
     assert a.intent_hash == b.intent_hash
 
     # ...adding a parameter (the substituted action) changes the fingerprint...
     c = ProposedAction(
-        instruction="pay my electricity bill",
+        instruction="place a small order",
         method="POST",
-        url="https://api.examplebank.in/transfer",
-        params={"amount": 2400, "currency": "INR", "beneficiary_type": "domestic", "to": "attacker"},
+        url="https://api.example.com/orders",
+        params={"amount": 2400, "currency": "USD", "destination": "internal", "recipient": "attacker"},
     )
     assert c.fingerprint != a.fingerprint
     # ...but intent binds to the instruction, which is unchanged.
@@ -208,23 +208,23 @@ def test_fingerprint_is_deterministic_and_param_sensitive():
 
 
 def test_fingerprint_normalises_method_host_and_param_order():
-    a = _small_transfer()
+    a = _small_order()
     # Lowercase method, uppercase host, and shuffled param order must all
     # normalise to the same fingerprint (method.upper, host.lower, sorted JSON).
     normalised = ProposedAction(
-        instruction="pay my electricity bill",
+        instruction="place a small order",
         method="post",
-        url="https://API.EXAMPLEBANK.IN/transfer",
-        params={"beneficiary_type": "domestic", "currency": "INR", "amount": 2400},
+        url="https://API.EXAMPLE.COM/orders",
+        params={"destination": "internal", "currency": "USD", "amount": 2400},
     )
     assert normalised.fingerprint == a.fingerprint
 
 
 def test_intent_hash_ignores_surrounding_whitespace():
     spaced = ProposedAction(
-        instruction="  pay my electricity bill  ",
+        instruction="  place a small order  ",
         method="POST",
-        url="https://api.examplebank.in/transfer",
-        params={"amount": 2400, "currency": "INR", "beneficiary_type": "domestic"},
+        url="https://api.example.com/orders",
+        params={"amount": 2400, "currency": "USD", "destination": "internal"},
     )
-    assert spaced.intent_hash == _small_transfer().intent_hash
+    assert spaced.intent_hash == _small_order().intent_hash

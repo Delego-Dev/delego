@@ -29,7 +29,7 @@ class ProposedAction:
     """What an agent wants to do, plus the instruction it believes authorises it.
 
     ``params`` are the decision-relevant fields extracted from the request
-    (e.g. ``{"amount": 2400, "currency": "INR", "beneficiary_type": "domestic"}``).
+    (e.g. ``{"amount": 2400, "currency": "USD", "destination": "internal"}``).
     The firewall evaluates constraints against these, so the agent must declare
     them honestly — they are also what gets fingerprinted and audited.
     """

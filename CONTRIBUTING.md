@@ -1,8 +1,8 @@
 # Contributing to delego
 
 Thanks for your interest in delego — a policy & audit firewall for agent
-actions. Please read [CLAUDE.md](CLAUDE.md) before making changes: it documents
-the design and, above all, the **invariants that must not be broken**.
+actions. Please read [ARCHITECTURE.md](ARCHITECTURE.md) before making changes: it
+documents the design and, above all, the **invariants that must not be broken**.
 
 ## Design invariants (do not violate)
 

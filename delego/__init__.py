@@ -2,7 +2,7 @@
 
 This package authorises an *action* (deterministically, no LLM in the loop)
 before any credential is used, parks sensitive actions for human approval, and
-writes a tamper-evident signed audit chain. See ``CLAUDE.md`` for the design
+writes a tamper-evident signed audit chain. See ``ARCHITECTURE.md`` for the design
 invariants and ``examples/demo.py`` for the de facto spec.
 
 The names below are the public API: the CLI (``delego.cli``) and MCP server

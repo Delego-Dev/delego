@@ -34,15 +34,15 @@ class ProposeInput(BaseModel):
     instruction: str = Field(
         ...,
         description="The original human instruction that this action serves "
-        "(e.g. 'pay my electricity bill'). Recorded and hashed for audit.",
+        "(e.g. 'place a small order'). Recorded and hashed for audit.",
         min_length=1,
     )
     method: str = Field(..., description="HTTP method, e.g. 'GET' or 'POST'", min_length=1)
-    url: str = Field(..., description="Full target URL, e.g. 'https://api.examplebank.in/transfer'")
+    url: str = Field(..., description="Full target URL, e.g. 'https://api.example.com/orders'")
     params: dict = Field(
         default_factory=dict,
         description="Decision-relevant fields of the request "
-        "(e.g. {'amount': 2400, 'currency': 'INR', 'beneficiary_type': 'domestic'}).",
+        "(e.g. {'amount': 2400, 'currency': 'USD', 'destination': 'internal'}).",
     )
 
 

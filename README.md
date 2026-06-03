@@ -147,12 +147,12 @@ constraints fail becomes a deny (fail-closed). See `policy.example.yaml`.
 
 ```yaml
 rules:
-  - name: small-domestic-transfer
+  - name: place-order
     decision: needs_approval
-    match: { method: POST, host: api.examplebank.in, path: /transfer }
+    match: { method: POST, host: api.example.com, path: /orders }
     constraints:
-      amount:     { field: amount, max: 5000, currency: INR }
-      allow_list: { field: beneficiary_type, in: [domestic] }
+      amount:     { field: amount, max: 5000, currency: USD }
+      allow_list: { field: destination, in: [internal] }
 ```
 
 Supported constraints in v0.1: `amount` (cap + currency), `allow_list`

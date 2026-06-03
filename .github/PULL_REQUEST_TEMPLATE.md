@@ -19,7 +19,7 @@
 - [ ] `python examples/demo.py` still shows all eight scenarios + tamper detection.
 - [ ] **Tests added/updated** for the behaviour changed (or explained why none are needed).
 - [ ] Updated `README.md` and `CHANGELOG.md` for any behaviour change.
-- [ ] I have **not weakened any design invariant** (see `CONTRIBUTING.md` / `CLAUDE.md`):
+- [ ] I have **not weakened any design invariant** (see `CONTRIBUTING.md` / `ARCHITECTURE.md`):
   no LLM in the authorization path; no credential custody; fail-closed; approvals
   bound to fingerprint + intent and single-use; append-only signed audit chain;
   fixed evaluation order.
