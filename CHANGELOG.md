@@ -6,6 +6,12 @@ adhere to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-06-04
+
+First public release on PyPI. (0.1.0 was the initial implementation and was never
+published.) Implements wire-protocol **0.2.0**; see
+[`__protocol_version__`](delego/__init__.py).
+
 ### Security
 - **Single-use approvals.** A human approval now releases its action exactly
   once: `engine.resolve` consumes the approval before executing, so a replayed
@@ -50,8 +56,14 @@ adhere to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Repository restructured to the standard Python layout (package under
   `delego/`, project files and `examples/demo.py` at the repo root) so
   `pip install -e .` and `python examples/demo.py` work as documented.
+- Replaced the BFSI-flavoured example with a generic `api.example.com` example
+  across the policy, demo, tests, and docs.
+- Retired the committed `CLAUDE.md`; durable design notes now live in
+  `ARCHITECTURE.md`. Added `delego.__protocol_version__` (the wire-protocol
+  version this reference implements, which must stay ≤ the spec's version) and a
+  spec-first / AI-assisted-contribution policy plus a PR template.
 
-## [0.1.0] — initial implementation (not yet published)
+## 0.1.0 — initial implementation (never released to PyPI)
 
 ### Added
 - Deterministic policy engine: forbidden → rules (first match wins) → default,
@@ -64,5 +76,5 @@ adhere to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   a FastMCP server exposing propose / resolve / audit_tail / show_policy.
 - `NullBroker` (default; holds no credentials) and an `HTTPProxyBroker` sketch.
 
-[Unreleased]: https://github.com/Delego-Dev/delego/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/Delego-Dev/delego/releases/tag/v0.1.0
+[Unreleased]: https://github.com/Delego-Dev/delego/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/Delego-Dev/delego/releases/tag/v0.2.0
