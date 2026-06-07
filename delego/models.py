@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any, Optional
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, urlunsplit
 
 from .util import canonical_json, sha256_hex
 
@@ -46,6 +46,33 @@ class ProposedAction:
     @property
     def path(self) -> str:
         return urlsplit(self.url).path or "/"
+
+    @property
+    def has_query(self) -> bool:
+        """Whether ``url`` carries a query string or fragment.
+
+        Through protocol 0.2 the fingerprint covers only method+host+path+params
+        (spec §4.2): the URL's query string is **not** part of the action's
+        identity. A query or fragment therefore carries data the firewall never
+        authorised — e.g. ``/orders?to=me`` and ``/orders?to=attacker`` share one
+        fingerprint. A broker MUST NOT forward it (spec §4.2); it executes only
+        the fingerprinted URL (:attr:`fingerprinted_url`) and refuses a stray
+        query rather than smuggling decision-relevant data past the decision.
+        """
+        parts = urlsplit(self.url)
+        return bool(parts.query) or bool(parts.fragment)
+
+    @property
+    def fingerprinted_url(self) -> str:
+        """The URL a broker may actually request: scheme + host + path only.
+
+        This is the exact slice of ``url`` that the fingerprint commits to
+        (host + path; method and params travel separately). Any query string or
+        fragment on ``url`` is dropped, because it is not represented in the
+        fingerprint and so was never authorised (see :attr:`has_query`).
+        """
+        parts = urlsplit(self.url)
+        return urlunsplit((parts.scheme, parts.netloc, parts.path, "", ""))
 
     @property
     def intent_hash(self) -> str:

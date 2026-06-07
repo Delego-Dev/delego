@@ -11,15 +11,24 @@ local Ed25519 key. That gives two properties a regulator actually asks for:
   exactly *why* an action was allowed and *which instruction* authorised it.
 
 This is the append-only ledger; ``verify()`` walks and checks the whole chain.
+
+**Locking.** ``append`` takes the cross-process file lock for its read-modify-write
+so concurrent writers can't fork the chain. ``transaction()`` exposes that same
+lock to a caller that must keep a count→decide→append sequence atomic — the
+rate-limit enforcement in ``engine.py`` uses it so concurrent ``propose`` calls
+cannot collectively exceed a cap (each would otherwise count under-cap before any
+appends its allow). The lock is **not** re-entrant, so the in-transaction
+``append`` does not re-acquire it.
 """
 
 from __future__ import annotations
 
 import json
 import os
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Iterator, Optional
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import (
@@ -73,6 +82,24 @@ def ensure_keys(priv_path: Path, pub_path: Path) -> None:
     )
 
 
+class _LockedAudit:
+    """A view of an :class:`AuditLog` while its file lock is already held.
+
+    Handed to the body of :meth:`AuditLog.transaction`. Its ``append`` and
+    ``count_allows`` do **not** take the lock (the transaction holds it), so a
+    count→decide→append sequence stays atomic across processes.
+    """
+
+    def __init__(self, log: "AuditLog") -> None:
+        self._log = log
+
+    def count_allows(self, rule: str, within_seconds: int) -> int:
+        return self._log._count_allows(rule, within_seconds)
+
+    def append(self, **payload) -> dict:
+        return self._log._append_locked(**payload)
+
+
 class AuditLog:
     def __init__(self, path, private_key_path, public_key_path):
         self.path = Path(path)
@@ -104,6 +131,49 @@ class AuditLog:
         return entries[-1] if entries else None
 
     # -- write ------------------------------------------------------------ #
+    def _append_locked(
+        self,
+        *,
+        phase: str,
+        outcome: str,
+        rule: Optional[str],
+        reasons: list[str],
+        intent_hash: str,
+        action_fingerprint: str,
+        action_summary: str,
+        approval_id: Optional[str] = None,
+    ) -> dict:
+        """The read-modify-write body of an append. **The file lock MUST already
+        be held** (by :meth:`append` or :meth:`transaction`); this method does not
+        take it, so it can run inside a larger atomic section without deadlocking
+        on the non-re-entrant lock."""
+        self._load_keys()
+        last = self._last()
+        seq = (last["seq"] + 1) if last else 0
+        prev_hash = last["entry_hash"] if last else GENESIS
+
+        payload = {
+            "seq": seq,
+            "ts": now_iso(),
+            "phase": phase,
+            "outcome": outcome,
+            "rule": rule,
+            "reasons": reasons,
+            "intent_hash": intent_hash,
+            "action_fingerprint": action_fingerprint,
+            "action_summary": action_summary,
+            "approval_id": approval_id,
+            "prev_hash": prev_hash,
+        }
+        entry_hash = sha256_hex(canonical_json(payload))
+        signature = self._priv.sign(entry_hash.encode("utf-8")).hex()
+        entry = {**payload, "entry_hash": entry_hash, "signature": signature}
+
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        with open(self.path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(entry) + "\n")
+        return entry
+
     def append(
         self,
         *,
@@ -116,35 +186,35 @@ class AuditLog:
         action_summary: str,
         approval_id: Optional[str] = None,
     ) -> dict:
-        self._load_keys()
         # Lock the whole read-modify-write: another writer must not slip a
         # receipt between our `_last()` and our append, or the chain forks.
         with file_lock(self.path):
-            last = self._last()
-            seq = (last["seq"] + 1) if last else 0
-            prev_hash = last["entry_hash"] if last else GENESIS
+            return self._append_locked(
+                phase=phase,
+                outcome=outcome,
+                rule=rule,
+                reasons=reasons,
+                intent_hash=intent_hash,
+                action_fingerprint=action_fingerprint,
+                action_summary=action_summary,
+                approval_id=approval_id,
+            )
 
-            payload = {
-                "seq": seq,
-                "ts": now_iso(),
-                "phase": phase,
-                "outcome": outcome,
-                "rule": rule,
-                "reasons": reasons,
-                "intent_hash": intent_hash,
-                "action_fingerprint": action_fingerprint,
-                "action_summary": action_summary,
-                "approval_id": approval_id,
-                "prev_hash": prev_hash,
-            }
-            entry_hash = sha256_hex(canonical_json(payload))
-            signature = self._priv.sign(entry_hash.encode("utf-8")).hex()
-            entry = {**payload, "entry_hash": entry_hash, "signature": signature}
+    @contextmanager
+    def transaction(self) -> Iterator[_LockedAudit]:
+        """Hold the ledger's file lock for the duration of the block.
 
-            self.path.parent.mkdir(parents=True, exist_ok=True)
-            with open(self.path, "a", encoding="utf-8") as f:
-                f.write(json.dumps(entry) + "\n")
-        return entry
+        Use this when a *count then append* must be atomic — chiefly rate-limit
+        enforcement, where two concurrent ``propose`` calls would each read
+        ``used < max`` and then both append an allow, exceeding the cap. Within
+        the block, use the yielded :class:`_LockedAudit` (its ``count_allows`` and
+        ``append`` run lock-free under the held lock). Keep the block short: it
+        serialises all ledger writers, and any work inside it (e.g. a broker call)
+        holds the lock for that whole duration.
+        """
+        self._load_keys()
+        with file_lock(self.path):
+            yield _LockedAudit(self)
 
     # -- verify ----------------------------------------------------------- #
     def verify(
@@ -223,6 +293,9 @@ class AuditLog:
         Used by the rate-limit constraint. Counts ``allow`` receipts (the moment
         of authorisation) for the given rule.
         """
+        return self._count_allows(rule, within_seconds)
+
+    def _count_allows(self, rule: str, within_seconds: int) -> int:
         from time import time
 
         cutoff = time() - within_seconds
