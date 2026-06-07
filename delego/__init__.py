@@ -13,6 +13,7 @@ re-exported here. This module is re-export only — no logic lives here.
 from __future__ import annotations
 
 from .audit import AuditLog, ensure_keys
+from .brokers import BrokerRefusal
 from .config import Paths, build_firewall
 from .engine import Firewall
 from .models import (
@@ -22,9 +23,9 @@ from .models import (
     Decision,
     ProposedAction,
 )
-from .policy import Policy
+from .policy import Policy, PolicyError
 
-__version__ = "0.2.2"  # PyPI package version, 0.x.y (x = protocol, y = iteration)
+__version__ = "0.2.3"  # PyPI package version, 0.x.y (x = protocol, y = iteration)
 
 # Highest delego *protocol* version (see the wire spec's "Protocol versions")
 # this reference implements. Protocol/spec versions are 0.x (two-component); the
@@ -37,6 +38,8 @@ __all__ = [
     "Decision",
     "Firewall",
     "Policy",
+    "PolicyError",
+    "BrokerRefusal",
     "AuditLog",
     "ensure_keys",
     "Paths",

@@ -6,6 +6,38 @@ adhere to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.3] — 2026-06-08
+
+Protocol unchanged (still 0.2). Security fixes; no fingerprint-preimage change.
+
+### Security
+- **Brokers now refuse an unauthorised query string (confused-deputy fix).**
+  Through protocol 0.2 the action fingerprint covers method+host+path+params but
+  **not** the URL query, so `/orders?to=me` and `/orders?to=attacker` share one
+  fingerprint. The shipped brokers (`NullBroker`, `HTTPProxyBroker`, and the
+  sample app's `HttpxBroker`) previously forwarded `action.url` verbatim,
+  re-opening the gap. They now request `ProposedAction.fingerprinted_url`
+  (scheme+host+path only) and **fail closed** (`BrokerRefusal`) on any
+  query/fragment, per spec §4.2. New `ProposedAction.has_query` /
+  `.fingerprinted_url` helpers.
+- **Policy documents are validated and fail closed on load.** `Policy.load` now
+  raises `PolicyError` on a structurally/semantically invalid policy and
+  **rejects unknown `match`/`constraints`/top-level keys** (previously a
+  misspelled constraint like `amount_max` was silently dropped — a fail-*open*
+  hole that weakened a rule). Validated against a vendored copy of the spec's
+  `schema/policy.json` when `jsonschema` is installed.
+- **Rate limits hold under concurrency.** The evaluate→execute→append sequence
+  for rate-limited rules is now serialized under the ledger lock, so concurrent
+  proposes can no longer each observe `used < max` and collectively exceed the cap.
+
+### Added
+- Sample app: the human-approval endpoints (`/approvals/{id}/approve`, `/deny`)
+  are gated behind a `DELEGO_APPROVAL_TOKEN` bearer (constant-time check), a
+  **separate trust domain** from the agent-facing `/propose` & `/resolve`; they
+  **fail closed** if the token is unset, so a compromised agent cannot approve
+  its own actions.
+- Exports: `PolicyError`, `BrokerRefusal`.
+
 ## [0.2.2] — 2026-06-04
 
 Protocol unchanged (still 0.2).
