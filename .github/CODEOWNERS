@@ -1,0 +1,3 @@
+# delego — the maintainer reviews all contributions.
+# Enforced via branch protection (require review from Code Owners).
+* @koishore
