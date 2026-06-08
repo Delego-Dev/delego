@@ -1,7 +1,7 @@
 # Contributing to delego
 
-Thanks for your interest in delego — a policy & audit firewall for agent
-actions. Please read [ARCHITECTURE.md](ARCHITECTURE.md) before making changes: it
+Thanks for your interest in delego — intent-bound action authorization for AI
+agents. Please read [ARCHITECTURE.md](ARCHITECTURE.md) before making changes: it
 documents the design and, above all, the **invariants that must not be broken**.
 
 ## Design invariants (do not violate)
