@@ -1,8 +1,8 @@
 # Security Policy
 
-delego is a security tool — a policy & audit firewall that authorises an agent's
-action *before* a credential is used, and leaves a tamper-evident receipt. We
-take vulnerabilities seriously.
+delego is a security tool — intent-bound action authorization for AI agents that
+authorises an agent's action *before* a credential is used, and leaves a
+tamper-evident receipt. We take vulnerabilities seriously.
 
 ## Reporting a vulnerability
 

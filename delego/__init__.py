@@ -1,4 +1,4 @@
-"""delego — a policy & audit firewall for agent actions.
+"""delego — intent-bound action authorization for AI agents.
 
 This package authorises an *action* (deterministically, no LLM in the loop)
 before any credential is used, parks sensitive actions for human approval, and

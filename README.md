@@ -4,7 +4,7 @@
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org)
 [![License](https://img.shields.io/badge/license-Apache--2.0-green)](LICENSE)
 
-A **policy & audit firewall for agent actions**. It sits between an agent and
+**Intent-bound action authorization for AI agents.** It sits between an agent and
 whatever credential broker holds the user's secrets, and it answers the one
 question brokers don't: *is this specific action the thing the human actually
 asked for?*

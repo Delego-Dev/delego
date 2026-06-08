@@ -8,7 +8,7 @@ How delego is put together, and the invariants that define it. For the rules on
 
 ## What delego is
 
-delego is a **policy & audit firewall for agent actions**. It sits between an
+delego is **intent-bound action authorization for AI agents**. It sits between an
 agent and whatever credential broker holds the user's secrets, and answers the
 question brokers don't: *is this specific action the thing the human actually
 asked for?*

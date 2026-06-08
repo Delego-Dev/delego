@@ -1,7 +1,7 @@
 # Roadmap
 
-Where delego is going and **where to help**. delego is a policy & audit firewall
-for agent actions; the core (deterministic decisions + a signed audit chain) is
+Where delego is going and **where to help**. delego is intent-bound action
+authorization for AI agents; the core (deterministic decisions + a signed audit chain) is
 shipped and stable. The work below is ordered by what unblocks real adoption.
 
 Versioning: the **protocol/spec** is `0.x` (the [wire spec](https://github.com/Delego-Dev/specification)

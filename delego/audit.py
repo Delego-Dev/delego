@@ -1,6 +1,6 @@
 """Tamper-evident audit log.
 
-Every decision the firewall makes is written as a *receipt*. Receipts form a
+Every decision delego makes is written as a *receipt*. Receipts form a
 hash chain (each carries the previous receipt's hash) and each is signed with a
 local Ed25519 key. That gives two properties a regulator actually asks for:
 
