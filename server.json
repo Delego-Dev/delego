@@ -1,0 +1,47 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.Delego-Dev/delego",
+  "description": "Intent-bound action authorization for AI agents: policy, human approval, and a signed audit trail.",
+  "version": "0.2.3",
+  "repository": {
+    "url": "https://github.com/Delego-Dev/delego",
+    "source": "github"
+  },
+  "packages": [
+    {
+      "registryType": "pypi",
+      "registryBaseUrl": "https://pypi.org",
+      "identifier": "delego",
+      "version": "0.2.3",
+      "runtimeHint": "uvx",
+      "runtimeArguments": [
+        {
+          "type": "positional",
+          "value": "--from",
+          "valueHint": "from-flag"
+        },
+        {
+          "type": "positional",
+          "value": "delego[mcp]",
+          "valueHint": "package-with-mcp-extra"
+        },
+        {
+          "type": "positional",
+          "value": "delego-mcp",
+          "valueHint": "console-script"
+        }
+      ],
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "DELEGO_HOME",
+          "description": "Directory holding the policy, signing keys, and audit ledger (defaults to ~/.delego). Set this to keep state project-scoped, e.g. /abs/path/to/project/.claude/.delego.",
+          "isRequired": false,
+          "isSecret": false
+        }
+      ]
+    }
+  ]
+}
