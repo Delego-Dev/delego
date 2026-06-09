@@ -6,6 +6,16 @@ adhere to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.4] — 2026-06-09
+
+Packaging only; protocol unchanged (still 0.2). No functional, API, or
+fingerprint changes.
+
+### Added
+- MCP Registry name marker (`mcp-name: io.github.Delego-Dev/delego`) in the
+  README so delego can be published to the official MCP Registry
+  (registry.modelcontextprotocol.io).
+
 ## [0.2.3] — 2026-06-08
 
 Protocol unchanged (still 0.2). Security fixes; no fingerprint-preimage change.
