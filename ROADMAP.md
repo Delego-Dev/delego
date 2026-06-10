@@ -15,7 +15,8 @@ implements and `y` the iteration. Normative changes land in the spec first.
   approvals (the confused-deputy guard).
 - **Append-only, Ed25519-signed, hash-chained audit ledger** with verification.
 - **CLI** and an **MCP server** (`delego_propose_action` / `_resolve_action` /
-  `_audit_tail` / `_show_policy`).
+  `_pending` / `_audit_tail` / `_show_policy`; approve/deny stay off the MCP
+  surface by design).
 - **Concurrency-safe** file-backed state (0.2.1 lock).
 - **`HTTPProxyBroker`** — forwards an authorised action to an external credential
   gateway (0.2.2).

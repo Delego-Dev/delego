@@ -138,6 +138,8 @@ def test_resolve_with_substituted_query_denies(firewall):
     assert res.outcome == OUTCOME_DENY
     assert res.executed is False
     assert any("action mismatch" in r for r in res.reasons)
+    # The deny names the approved action so a drifted caller can self-correct.
+    assert any("the approval was issued for: POST api.example.com/orders" in r for r in res.reasons)
     # Not consumed — the approved action itself can still be released.
     assert firewall.approvals.get(d.approval_id)["status"] == "approved"
 

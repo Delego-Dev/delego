@@ -1,6 +1,6 @@
 [project]
 name = "delego"
-version = "0.3.0"
+version = "0.3.1"
 description = "Intent-bound action authorization for AI agents — authorise before a credential is used, require human approval for sensitive actions, and prove every action traces back to the instruction that authorised it."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -41,7 +41,9 @@ delego-mcp = "delego.mcp_server:main"
 
 [project.optional-dependencies]
 mcp = ["mcp>=1.2.0"]
-dev = ["pytest>=8.0"]
+# dev includes the mcp extra so the test suite exercises the MCP facade
+# (tests/test_mcp_server.py skips gracefully where mcp is absent).
+dev = ["pytest>=8.0", "mcp>=1.2.0"]
 
 [build-system]
 requires = ["hatchling"]
