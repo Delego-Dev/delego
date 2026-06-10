@@ -112,13 +112,17 @@ class Firewall:
         # The approval is bound to one exact action. A different action under
         # the same approval id is refused and recorded.
         if rec["action_fingerprint"] != fp:
+            # Naming the approved action lets a well-meaning caller correct a
+            # drifted parameter and re-present; the summary is already visible
+            # via `delego pending` and the ledger, so nothing new is revealed.
             return self._refuse(
                 action,
                 ih,
                 fp,
                 approval_id,
                 "approval/action mismatch: this approval was issued for a different "
-                "action (possible confused-deputy / substituted action)",
+                "action (possible confused-deputy / substituted action); the "
+                f"approval was issued for: {rec.get('summary')}",
             )
 
         # --- intent guard ---------------------------------------------- #
@@ -132,7 +136,7 @@ class Firewall:
                 fp,
                 approval_id,
                 "approval/intent mismatch: this approval was issued for a different "
-                "instruction",
+                f"instruction; the approval was issued for: {rec.get('instruction')!r}",
             )
 
         if rec["status"] == STATUS_PENDING:

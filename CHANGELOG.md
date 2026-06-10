@@ -6,6 +6,42 @@ adhere to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.1] — 2026-06-10
+
+UX patch from live MCP testing; protocol unchanged (still 0.3).
+
+### Changed
+- **MCP tools return structured data.** Tool results are dicts/lists (FastMCP
+  structured content) instead of JSON-encoded strings inside JSON — agents no
+  longer parse twice.
+- **A broker refusal over MCP is deny-shaped, not an exception.** Proposing an
+  allowed action whose URL carries a `#fragment` now returns
+  `outcome: "deny", executed: false` with the refusal reason (the receipt was
+  already written since 0.3.0); previously the `BrokerRefusal` surfaced as a
+  raw tool error.
+- **An uninitialised home is a structured `setup_required` payload over MCP**
+  (with the exact `delego init` command), not a stack trace. Initialisation
+  stays deliberate — the server does not silently generate signing keys.
+- **Mismatch denials name what the approval was issued for.** A
+  fingerprint/intent mismatch on `resolve` includes the approved action's
+  summary (or instruction), so a caller that drifted a parameter can
+  self-correct. Nothing new is revealed — the summary is already visible via
+  `delego pending` and the ledger.
+- **`delego approve`/`deny` echo the action and instruction** being decided —
+  the human consent moment shows *what* was authorised, not just an id.
+
+### Added
+- **`delego_pending` MCP tool** — a read-only list of parked approvals (id,
+  summary, instruction, rule, fingerprint, created_at). Approve/deny remain
+  deliberately absent from the MCP surface: the agent that proposed an action
+  must never be able to approve it.
+- **`delego verify --anchor-file PATH`** — checks the chain against the head
+  stored in the file and, only after a clean verify, advances it to the
+  current head. Makes §8.3 head-anchoring a one-flag habit; a failed verify
+  never advances the anchor.
+- The `dev` extra now includes `mcp`, so CI exercises the MCP facade
+  (`tests/test_mcp_server.py`; skips gracefully where `mcp` is absent).
+
 ## [0.3.0] — 2026-06-10
 
 Implements wire **protocol 0.3** (`__protocol_version__ = "0.3"`).
@@ -229,7 +265,8 @@ published.) Implements wire-protocol **0.2**; see
   a FastMCP server exposing propose / resolve / audit_tail / show_policy.
 - `NullBroker` (default; holds no credentials) and an `HTTPProxyBroker` sketch.
 
-[Unreleased]: https://github.com/Delego-Dev/delego/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/Delego-Dev/delego/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/Delego-Dev/delego/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/Delego-Dev/delego/compare/v0.2.4...v0.3.0
 [0.2.4]: https://github.com/Delego-Dev/delego/compare/v0.2.3...v0.2.4
 [0.2.3]: https://github.com/Delego-Dev/delego/compare/v0.2.2...v0.2.3

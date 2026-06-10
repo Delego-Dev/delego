@@ -77,7 +77,8 @@ product. They are enumerated, with the "do not violate" framing, in
 - `delego/cli.py` — the `delego` CLI: init, home, policy, pending, approve, deny,
   log, verify.
 - `delego/mcp_server.py` — FastMCP server exposing `delego_propose_action`,
-  `delego_resolve_action`, `delego_audit_tail`, `delego_show_policy`.
+  `delego_resolve_action`, `delego_pending` (read-only), `delego_audit_tail`,
+  `delego_show_policy`. Approve/deny are deliberately not exposed over MCP.
 - `examples/demo.py` — end-to-end walkthrough; the de facto behavioural spec.
 - `tests/` — pytest suite (the demo scenarios + invariant guards).
 - `policy.example.yaml` — a generic starter policy for an HTTP/JSON API.

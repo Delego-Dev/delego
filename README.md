@@ -140,8 +140,13 @@ Tools exposed:
 |------|--------------|
 | `delego_propose_action` | submit an action; returns allow / deny / needs_approval |
 | `delego_resolve_action` | complete an approved action (fingerprint must match) |
+| `delego_pending` | list actions awaiting human approval (read-only) |
 | `delego_audit_tail` | read recent receipts |
 | `delego_show_policy` | show the active policy |
+
+Approving and denying are deliberately **not** exposed over MCP — the agent
+that proposed an action must never be able to approve it; a human decides
+out-of-band.
 
 Typical flow: the agent calls `delego_propose_action`. If it comes back
 `needs_approval` with an `approval_id`, a human runs `delego approve <id>`, then

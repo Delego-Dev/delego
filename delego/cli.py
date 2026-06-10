@@ -112,7 +112,12 @@ def _decide(paths: Paths, approval_id: str, approved: bool, approver: str) -> No
     if rec is None:
         click.echo(f"No such approval: {approval_id}")
         raise SystemExit(1)
+    # Echo exactly what was decided: this is the human consent moment, and the
+    # approver should see the action and instruction, not just an opaque id.
     click.echo(f"{approval_id}: {rec['status']}")
+    click.echo(f"    {rec['summary']}")
+    if rec.get("instruction"):
+        click.echo(f"    instruction: {rec['instruction']!r}")
 
 
 @cli.command()
@@ -140,38 +145,61 @@ def log(paths: Paths, lines: int) -> None:
     "ledger's writer cannot rewrite, and pass it back here to detect "
     "truncation/rollback.",
 )
+@click.option(
+    "--anchor-file",
+    default=None,
+    type=click.Path(dir_okay=False),
+    help="Path to a head-anchor file: verification checks the chain against "
+    "the head stored there (if any) and, on success, updates it to the "
+    "current head. Keep the file somewhere the ledger's writer cannot "
+    "rewrite (another volume, another host).",
+)
 @click.pass_obj
-def verify(paths: Paths, expected_head: str | None) -> None:
+def verify(paths: Paths, expected_head: str | None, anchor_file: str | None) -> None:
     """Verify the audit chain (hashes, linkage, signatures)."""
+    if expected_head is not None and anchor_file is not None:
+        raise click.UsageError("use either --expected-head or --anchor-file, not both")
     click.echo(f"home: {paths.home}")
     audit = AuditLog(paths.audit_log, paths.private_key, paths.public_key)
+    anchor_path = Path(anchor_file) if anchor_file is not None else None
+
     head = None
+    if anchor_path is not None and anchor_path.exists():
+        expected_head = anchor_path.read_text(encoding="utf-8").strip()
     if expected_head is not None:
         seq_s, _, hash_s = expected_head.partition(":")
         if not seq_s.isdigit() or not hash_s:
             raise click.BadParameter("expected SEQ:ENTRY_HASH, e.g. 41:9f3c…", param_hint="--expected-head")
         head = (int(seq_s), hash_s)
+
     ok, problems = audit.verify(expected_head=head)
-    if ok:
-        click.echo("Audit chain OK: all receipts intact and signed.")
-        last = audit.tail(1)
-        if last:
-            click.echo(f"head: {last[-1]['seq']}:{last[-1]['entry_hash']}")
-        if head is not None:
-            click.echo("Head anchor matches: no truncation/rollback against the anchor.")
-        else:
-            # Spec §8.3: an auditor holding no external anchor must not return
-            # an unqualified "valid" — a tail-truncated ledger verifies clean.
-            click.echo(
-                "Note: without an external head anchor, truncation of the most "
-                "recent receipts cannot be ruled out. Persist the head printed "
-                "above outside this machine and verify with --expected-head."
-            )
-    else:
+    if not ok:
         click.echo("AUDIT CHAIN FAILED:")
         for p in problems:
             click.echo(f"  - {p}")
         raise SystemExit(1)
+
+    click.echo("Audit chain OK: all receipts intact and signed.")
+    last = audit.tail(1)
+    current = f"{last[-1]['seq']}:{last[-1]['entry_hash']}" if last else None
+    if current:
+        click.echo(f"head: {current}")
+    if head is not None:
+        click.echo("Head anchor matches: no truncation/rollback against the anchor.")
+    if anchor_path is not None and current:
+        # Advance the anchor only after a clean verify, so it always names a
+        # head this auditor actually checked.
+        anchor_path.write_text(current + "\n", encoding="utf-8")
+        click.echo(f"Anchor updated: {anchor_file}")
+    elif head is None:
+        # Spec §8.3: an auditor holding no external anchor must not return
+        # an unqualified "valid" — a tail-truncated ledger verifies clean.
+        click.echo(
+            "Note: without an external head anchor, truncation of the most "
+            "recent receipts cannot be ruled out. Persist the head printed "
+            "above outside this machine and verify with --expected-head or "
+            "--anchor-file."
+        )
 
 
 if __name__ == "__main__":
