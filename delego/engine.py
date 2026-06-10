@@ -104,7 +104,9 @@ class Firewall:
         ih, fp = action.intent_hash, action.fingerprint
 
         if rec is None:
-            return Decision(OUTCOME_DENY, None, [f"unknown approval id {approval_id!r}"], ih, fp)
+            # Recorded like every other refusal in this flow (spec §7): probing
+            # invalid approval ids must leave evidence, not a silent deny.
+            return self._refuse(action, ih, fp, approval_id, f"unknown approval id {approval_id!r}")
 
         # --- confused-deputy guard ------------------------------------- #
         # The approval is bound to one exact action. A different action under
@@ -189,8 +191,28 @@ class Firewall:
         ``audit`` is the handle to append with: the in-transaction view when
         called under :meth:`propose`'s rate-limit lock (the lock is not
         re-entrant), the plain log (``self.audit``) otherwise.
+
+        A broker that refuses or fails MUST still leave a receipt (spec §8:
+        every decision and execution is recorded) — otherwise the very refusal
+        the broker is proud of catching is invisible in the ledger, and a
+        crash between authorisation and execution leaves no trace the action
+        was ever authorised. The failure is recorded as an ``execution``/deny
+        receipt and the exception re-raised for the caller.
         """
-        result = self.broker.execute(action)
+        try:
+            result = self.broker.execute(action)
+        except Exception as e:
+            audit.append(
+                phase="execution",
+                outcome=OUTCOME_DENY,
+                rule=rule,
+                reasons=reasons + [f"broker did not execute: {e}"],
+                intent_hash=intent_hash,
+                action_fingerprint=fingerprint,
+                action_summary=action.summary(),
+                approval_id=approval_id,
+            )
+            raise
         audit.append(
             phase="execution",
             outcome=OUTCOME_ALLOW,

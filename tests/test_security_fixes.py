@@ -65,6 +65,27 @@ def test_broker_executes_a_clean_action():
     assert rec["status"] == "simulated"
 
 
+def test_broker_refusal_during_propose_is_audited(firewall):
+    # An allowed action whose broker refuses (fragment guard) must still leave
+    # a receipt — spec §8: every decision and execution is recorded. Before
+    # 0.3.0 the exception propagated with nothing written, so the refusal was
+    # invisible in the ledger.
+    bad = ProposedAction(
+        instruction="read my account details",
+        method="GET",
+        url="https://api.example.com/accounts/me#smuggled",
+        params={},
+    )
+    with pytest.raises(BrokerRefusal):
+        firewall.propose(bad)
+
+    last = firewall.audit.tail(1)[-1]
+    assert last["phase"] == "execution" and last["outcome"] == "deny"
+    assert any("broker did not execute" in r for r in last["reasons"])
+    ok, problems = firewall.audit.verify()
+    assert ok, problems
+
+
 # --- C2 (0.3): query canonicalization follows spec §4.2 exactly ---------------
 
 def test_canonical_query_decodes_sorts_and_preserves_duplicates():

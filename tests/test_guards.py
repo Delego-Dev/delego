@@ -35,6 +35,10 @@ def test_resolve_unknown_approval_id_denies(firewall):
     assert res.outcome == OUTCOME_DENY
     assert res.executed is False
     assert any("unknown approval" in r for r in res.reasons)
+    # The probe leaves evidence: recorded as an execution/deny receipt (spec §7).
+    last = firewall.audit.tail(1)[-1]
+    assert last["phase"] == "execution" and last["outcome"] == OUTCOME_DENY
+    assert any("unknown approval" in r for r in last["reasons"])
 
 
 def test_resolve_while_pending_returns_needs_approval(firewall):

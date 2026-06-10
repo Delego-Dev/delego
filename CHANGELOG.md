@@ -32,6 +32,16 @@ Implements wire **protocol 0.3** (`__protocol_version__ = "0.3"`).
   safe — just over-strict.
 
 ### Fixed
+- **Every refusal and execution now leaves a receipt (audit completeness,
+  spec §7/§8).** Two paths previously returned/raised without writing to the
+  ledger: (1) `resolve()` with an **unknown approval id** denied silently —
+  an attacker could probe approval ids without leaving evidence; it is now
+  recorded as an `execution`/`deny` receipt like every other refusal in the
+  resolve flow. (2) A **broker refusal or failure** during execution
+  propagated with nothing written — the allow decision and the failure were
+  both invisible in the ledger (including the broker's own `BrokerRefusal`
+  guard). `_execute` now records an `execution`/`deny` receipt with the
+  broker's reason before re-raising.
 - **Rate limits actually hold under concurrency now.** The 0.2.3 changelog
   claimed the evaluate→execute→append sequence was serialized under the ledger
   lock, but `engine.propose` never used `audit.transaction()` — concurrent
