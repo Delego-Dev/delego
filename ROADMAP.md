@@ -21,8 +21,12 @@ implements and `y` the iteration. Normative changes land in the spec first.
   gateway (0.2.2).
 - Published on **PyPI** (`pip install delego`); a **[sample app](https://github.com/Delego-Dev/sample-app)**
   (FastAPI) shows how to build on it.
+- **Query-string-bound fingerprint** (spec §4.2) — the URL query is folded into
+  the `action_fingerprint`, so decision-relevant data can't ride it (0.3.0,
+  breaking; regenerated CTK vectors). Rate-limited proposes are serialized under
+  the ledger lock, making the cap exact on a single host (0.3.0).
 
-## Now — make it usable in production (protocol 0.2)
+## Now — make it usable in production (protocol 0.3)
 
 1. **More broker adapters.** The broker is where a real credential lives; delego
    never holds it. `HTTPProxyBroker` (gateway-forwarding) ships in 0.2.2.
@@ -48,10 +52,9 @@ implements and `y` the iteration. Normative changes land in the spec first.
    *This is the moat.*
 5. **Single-writer daemon.** A long-running process so non-MCP clients work, the
    CLI + MCP share live state over a socket, and rate-limit counting is exact
-   under concurrency (0.2.1 made writes corruption-safe; this makes them serial).
-6. **Query-string-bound fingerprint** (spec §4.2) — fold the URL query into the
-   fingerprint so decision-relevant data can't ride it. Breaking; ships with new
-   CTK vectors.
+   across hosts without holding a file lock through broker calls (0.2.1 made
+   writes corruption-safe; 0.3.0 made the cap exact on one host; this makes it
+   serial everywhere).
 
 ## Later
 

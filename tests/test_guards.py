@@ -35,6 +35,10 @@ def test_resolve_unknown_approval_id_denies(firewall):
     assert res.outcome == OUTCOME_DENY
     assert res.executed is False
     assert any("unknown approval" in r for r in res.reasons)
+    # The probe leaves evidence: recorded as an execution/deny receipt (spec §7).
+    last = firewall.audit.tail(1)[-1]
+    assert last["phase"] == "execution" and last["outcome"] == OUTCOME_DENY
+    assert any("unknown approval" in r for r in last["reasons"])
 
 
 def test_resolve_while_pending_returns_needs_approval(firewall):
@@ -114,6 +118,43 @@ def test_resolve_with_different_instruction_denies(firewall):
     assert firewall.approvals.get(d.approval_id)["status"] == "approved"
 
 
+def test_resolve_with_substituted_query_denies(firewall):
+    # Protocol 0.3: the query is folded into the fingerprint, so an approval
+    # granted for one query cannot release the same path with another — the
+    # exact confused-deputy gap the 0.2 preimage left open (spec §4.2, §7).
+    order = _small_order()
+    d = firewall.propose(order)
+    firewall.approvals.decide(d.approval_id, approved=True, approver="koishore")
+
+    redirected = ProposedAction(
+        instruction=order.instruction,
+        method=order.method,
+        url=order.url + "?to=attacker",
+        params=order.params,
+    )
+    assert redirected.fingerprint != order.fingerprint
+
+    res = firewall.resolve(d.approval_id, redirected)
+    assert res.outcome == OUTCOME_DENY
+    assert res.executed is False
+    assert any("action mismatch" in r for r in res.reasons)
+    # Not consumed — the approved action itself can still be released.
+    assert firewall.approvals.get(d.approval_id)["status"] == "approved"
+
+
+# A single GET rule capped at 1 allow/hour — shared by the two rate-limit tests.
+RATE_LIMITED_POLICY = """
+version: 1
+default: deny
+rules:
+  - name: read-accounts
+    decision: allow
+    match: { method: GET, host: api.example.com, path: /accounts/** }
+    constraints:
+      rate_limit: { max: 1, per: hour }
+"""
+
+
 # --------------------------------------------------------------------------- #
 # a rate limit that cannot be evaluated must fail closed, never silently pass
 # --------------------------------------------------------------------------- #
@@ -157,18 +198,6 @@ def test_verify_reports_removed_field_without_crashing(firewall):
 # --------------------------------------------------------------------------- #
 # rate_limit is fail-closed once the cap is reached
 # --------------------------------------------------------------------------- #
-RATE_LIMITED_POLICY = """
-version: 1
-default: deny
-rules:
-  - name: read-accounts
-    decision: allow
-    match: { method: GET, host: api.example.com, path: /accounts/** }
-    constraints:
-      rate_limit: { max: 1, per: hour }
-"""
-
-
 def test_rate_limit_denies_after_cap(make_firewall):
     fw = make_firewall(RATE_LIMITED_POLICY)
     action = ProposedAction(

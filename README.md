@@ -20,7 +20,7 @@ asked for?*
                            └── needs_approval ──▶  human (CLI)
 ```
 
-📜 **Protocol:** delego implements **protocol 0.2** of the open [delego wire specification](https://github.com/Delego-Dev/specification) — canonicalization, the policy schema, intent/fingerprint binding, and the signed audit chain. The authorization token (spec 0.3) is specified but not yet implemented.
+📜 **Protocol:** delego implements **protocol 0.3** of the open [delego wire specification](https://github.com/Delego-Dev/specification) — canonicalization, the policy schema, intent/fingerprint binding **including the §4.2 query-fold**, and the signed audit chain. The authorization token (spec §9) is an optional profile, not yet implemented.
 
 ## Why this exists
 
@@ -196,20 +196,25 @@ See **[ROADMAP.md](ROADMAP.md)** for where delego is going and where to help.
 
 ## Status
 
-- **Implemented (protocol 0.2):** the policy engine, intent hashing, action
-  fingerprinting, the confused-deputy guard, intent-bound + single-use human
-  approvals, and the signed, hash-chained audit ledger with verification.
+- **Implemented (protocol 0.3):** the policy engine, intent hashing, action
+  fingerprinting **with the URL query folded into the fingerprint** (spec §4.2 —
+  `/orders?to=me` and `/orders?to=attacker` are different actions), the
+  confused-deputy guard, intent-bound + single-use human approvals, and the
+  signed, hash-chained audit ledger with verification and an external
+  head-anchor check (`delego verify --expected-head`).
 - **Brokers:** the default `NullBroker` holds no credentials and makes no real
   request — it records what *would* be sent (for demos and tests). `HTTPProxyBroker`
   forwards an authorised action to an external credential gateway; or write your
   own against the `BrokerAdapter` protocol in `delego/brokers.py`.
-- **Not yet:** the authorization token (spec 0.3), an always-on daemon (state is
-  file-backed and shared by the CLI and MCP server), and a non-MCP HTTP surface.
+- **Not yet:** the authorization token (spec §9, an optional profile), an
+  always-on daemon (state is file-backed and shared by the CLI and MCP server),
+  and a non-MCP HTTP surface.
 - **Known limitations:** concurrent writes to the file-backed ledger and approval
-  store are serialised with an OS file lock (corruption-safe), but rate-limit
-  *exactness* under concurrency still needs the planned single-writer daemon;
-  path globbing is coarse (`**` and `*` collapse); the URL query string is not
-  part of the action fingerprint (spec 0.3).
+  store are serialised with an OS file lock (corruption-safe). Rate limits are
+  **exact on a single host**: a policy carrying a `rate_limit` runs each propose
+  (including the broker call) under the ledger's transaction lock, so keep broker
+  timeouts modest; cross-host exactness needs the planned single-writer daemon.
+  Path globbing is coarse (`**` and `*` collapse).
 
 ## License
 

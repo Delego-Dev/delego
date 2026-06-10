@@ -49,7 +49,18 @@ class Firewall:
 
     # ------------------------------------------------------------------ #
     def propose(self, action: ProposedAction) -> Decision:
-        outcome, rule, reasons = self.policy.evaluate(action, self.audit)
+        # A rate_limit is exact only if its count→decide→append sequence is
+        # atomic: two concurrent proposes must not both read `used < max` before
+        # either appends its allow. For rate-limited policies the whole pipeline
+        # runs inside the ledger's transaction (file) lock — which also means
+        # the broker call holds that lock; keep broker timeouts modest.
+        if self.policy.has_rate_limit:
+            with self.audit.transaction() as audit:
+                return self._propose(action, audit)
+        return self._propose(action, self.audit)
+
+    def _propose(self, action: ProposedAction, audit) -> Decision:
+        outcome, rule, reasons = self.policy.evaluate(action, audit)
         ih, fp = action.intent_hash, action.fingerprint
 
         if outcome == OUTCOME_APPROVAL:
@@ -60,7 +71,7 @@ class Firewall:
                 instruction=action.instruction,
                 rule=rule,
             )
-            self.audit.append(
+            audit.append(
                 phase="decision",
                 outcome=OUTCOME_APPROVAL,
                 rule=rule,
@@ -73,10 +84,10 @@ class Firewall:
             return Decision(OUTCOME_APPROVAL, rule, reasons, ih, fp, approval_id=approval_id)
 
         if outcome == OUTCOME_ALLOW:
-            return self._execute(action, rule, reasons, ih, fp, approval_id=None)
+            return self._execute(action, rule, reasons, ih, fp, approval_id=None, audit=audit)
 
         # deny
-        self.audit.append(
+        audit.append(
             phase="decision",
             outcome=OUTCOME_DENY,
             rule=rule,
@@ -93,7 +104,9 @@ class Firewall:
         ih, fp = action.intent_hash, action.fingerprint
 
         if rec is None:
-            return Decision(OUTCOME_DENY, None, [f"unknown approval id {approval_id!r}"], ih, fp)
+            # Recorded like every other refusal in this flow (spec §7): probing
+            # invalid approval ids must leave evidence, not a silent deny.
+            return self._refuse(action, ih, fp, approval_id, f"unknown approval id {approval_id!r}")
 
         # --- confused-deputy guard ------------------------------------- #
         # The approval is bound to one exact action. A different action under
@@ -149,7 +162,9 @@ class Firewall:
         assert rec["status"] == STATUS_APPROVED
         self.approvals.consume(approval_id)
         reasons = [f"human approved by {rec.get('approver')!r}"]
-        return self._execute(action, rec.get("rule"), reasons, ih, fp, approval_id=approval_id)
+        return self._execute(
+            action, rec.get("rule"), reasons, ih, fp, approval_id=approval_id, audit=self.audit
+        )
 
     # ------------------------------------------------------------------ #
     def _refuse(self, action, intent_hash, fingerprint, approval_id, reason) -> Decision:
@@ -168,9 +183,37 @@ class Firewall:
         return Decision(OUTCOME_DENY, None, reasons, intent_hash, fingerprint, approval_id=approval_id)
 
     # ------------------------------------------------------------------ #
-    def _execute(self, action, rule, reasons, intent_hash, fingerprint, approval_id) -> Decision:
-        result = self.broker.execute(action)
-        self.audit.append(
+    def _execute(
+        self, action, rule, reasons, intent_hash, fingerprint, approval_id, audit
+    ) -> Decision:
+        """Run the broker, then record the execution receipt.
+
+        ``audit`` is the handle to append with: the in-transaction view when
+        called under :meth:`propose`'s rate-limit lock (the lock is not
+        re-entrant), the plain log (``self.audit``) otherwise.
+
+        A broker that refuses or fails MUST still leave a receipt (spec §8:
+        every decision and execution is recorded) — otherwise the very refusal
+        the broker is proud of catching is invisible in the ledger, and a
+        crash between authorisation and execution leaves no trace the action
+        was ever authorised. The failure is recorded as an ``execution``/deny
+        receipt and the exception re-raised for the caller.
+        """
+        try:
+            result = self.broker.execute(action)
+        except Exception as e:
+            audit.append(
+                phase="execution",
+                outcome=OUTCOME_DENY,
+                rule=rule,
+                reasons=reasons + [f"broker did not execute: {e}"],
+                intent_hash=intent_hash,
+                action_fingerprint=fingerprint,
+                action_summary=action.summary(),
+                approval_id=approval_id,
+            )
+            raise
+        audit.append(
             phase="execution",
             outcome=OUTCOME_ALLOW,
             rule=rule,

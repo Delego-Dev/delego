@@ -216,6 +216,16 @@ class Policy:
         default = data.get("default", OUTCOME_DENY)
         return cls(version=data.get("version", 1), default=default, rules=rules, forbidden=forbidden)
 
+    @property
+    def has_rate_limit(self) -> bool:
+        """Whether any rule carries a ``rate_limit`` constraint.
+
+        The engine uses this to decide if a propose must run inside the audit
+        ledger's transaction lock: a rate-limit count is exact only when the
+        count→decide→append sequence is atomic (spec §5, consistency class).
+        """
+        return any("rate_limit" in r.constraints for r in self.rules)
+
     def evaluate(self, action: ProposedAction, audit=None) -> tuple[str, Optional[str], list[str]]:
         """Return ``(outcome, rule_name, reasons)`` for a proposed action."""
         for fr in self.forbidden:

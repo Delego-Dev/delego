@@ -6,13 +6,17 @@ hash chain or interleave a torn record. These tests drive that contention with
 threads (each ``file_lock`` opens its own descriptor, so the exclusive lock
 serialises them) and assert integrity holds.
 
-They guard write *integrity*, not rate-limit exactness under concurrency — that
-count→execute→append window is closed only by the single-writer daemon.
+Since 0.3.0 they also guard rate-limit *exactness*: for a policy that carries a
+``rate_limit``, ``propose`` runs its count→decide→execute→append sequence inside
+the ledger's transaction lock, so concurrent proposes cannot collectively exceed
+the cap.
 """
 
 from __future__ import annotations
 
 import threading
+
+from delego import ProposedAction
 
 H = "0" * 64  # a stand-in 64-hex hash for fields the tests don't vary
 
@@ -71,6 +75,41 @@ def test_concurrent_approval_creates_are_intact(firewall):
     records = firewall.approvals._read()  # parses every line; a torn line would raise
     assert len(records) == n
     assert set(ids) == set(records) and len(ids) == n
+
+
+# --------------------------------------------------------------------------- #
+# a rate-limit cap holds exactly under concurrent proposes (transaction lock)
+# --------------------------------------------------------------------------- #
+def test_rate_limit_cap_holds_under_concurrent_proposes(make_firewall):
+    # 8 concurrent proposes against a cap of 2: without the transaction lock,
+    # every thread reads `used < max` before any appends its allow and all 8
+    # pass (the 0.2.x TOCTOU window). Exactly `max` may be allowed.
+    fw = make_firewall(
+        """
+        version: 1
+        default: deny
+        rules:
+          - name: read
+            decision: allow
+            match: { method: GET, host: api.example.com, path: /data }
+            constraints:
+              rate_limit: { max: 2, per: hour }
+        """
+    )
+    outcomes: list[str] = []
+    guard = threading.Lock()
+
+    def propose(i):
+        d = fw.propose(ProposedAction("read data", "GET", "https://api.example.com/data", {}))
+        with guard:
+            outcomes.append(d.outcome)
+
+    _run(propose, 8)
+
+    assert outcomes.count("allow") == 2
+    assert outcomes.count("deny") == 6
+    ok, problems = fw.audit.verify()
+    assert ok, problems
 
 
 # --------------------------------------------------------------------------- #

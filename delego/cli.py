@@ -131,14 +131,42 @@ def log(paths: Paths, lines: int) -> None:
 
 
 @cli.command()
+@click.option(
+    "--expected-head",
+    default=None,
+    metavar="SEQ:ENTRY_HASH",
+    help="External head anchor to check the chain against (spec §8.3). "
+    "Persist the seq + entry_hash printed by this command somewhere the "
+    "ledger's writer cannot rewrite, and pass it back here to detect "
+    "truncation/rollback.",
+)
 @click.pass_obj
-def verify(paths: Paths) -> None:
+def verify(paths: Paths, expected_head: str | None) -> None:
     """Verify the audit chain (hashes, linkage, signatures)."""
     click.echo(f"home: {paths.home}")
     audit = AuditLog(paths.audit_log, paths.private_key, paths.public_key)
-    ok, problems = audit.verify()
+    head = None
+    if expected_head is not None:
+        seq_s, _, hash_s = expected_head.partition(":")
+        if not seq_s.isdigit() or not hash_s:
+            raise click.BadParameter("expected SEQ:ENTRY_HASH, e.g. 41:9f3c…", param_hint="--expected-head")
+        head = (int(seq_s), hash_s)
+    ok, problems = audit.verify(expected_head=head)
     if ok:
         click.echo("Audit chain OK: all receipts intact and signed.")
+        last = audit.tail(1)
+        if last:
+            click.echo(f"head: {last[-1]['seq']}:{last[-1]['entry_hash']}")
+        if head is not None:
+            click.echo("Head anchor matches: no truncation/rollback against the anchor.")
+        else:
+            # Spec §8.3: an auditor holding no external anchor must not return
+            # an unqualified "valid" — a tail-truncated ledger verifies clean.
+            click.echo(
+                "Note: without an external head anchor, truncation of the most "
+                "recent receipts cannot be ruled out. Persist the head printed "
+                "above outside this machine and verify with --expected-head."
+            )
     else:
         click.echo("AUDIT CHAIN FAILED:")
         for p in problems:

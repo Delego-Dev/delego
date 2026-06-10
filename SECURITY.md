@@ -49,10 +49,17 @@ Be precise about what delego does and does not protect against:
   attacker-chosen.
 - **Audit tamper-evidence has limits.** Hash-chaining detects edits, reordering,
   and middle deletions, but **not truncation of the most recent receipts** (a
-  tail-truncated prefix verifies clean). Use `verify(expected_head=…)` with an
-  externally-anchored head to detect rollback. The Ed25519 signing key is stored
-  locally; anyone who can read it (e.g. after host compromise) can forge the
-  chain. Use an HSM/KMS and/or an external transparency anchor for high assurance.
+  tail-truncated prefix verifies clean). Use `verify(expected_head=…)` — or
+  `delego verify --expected-head SEQ:HASH` — with an externally-anchored head to
+  detect rollback; without one, `delego verify` says so explicitly (spec §8.3).
+  The Ed25519 signing key is stored locally; anyone who can read it (e.g. after
+  host compromise) can forge the chain. Use an HSM/KMS and/or an external
+  transparency anchor for high assurance.
+- **Rate-limit consistency class (spec §5).** With a `rate_limit` in the policy,
+  each propose runs its count→decide→execute→append sequence under the ledger's
+  exclusive file lock: the cap is **exact among writers sharing one delego home
+  on one host**. Writers on different hosts (or different homes) do not share
+  the lock — the count is best-effort there until the single-writer daemon.
 
 These are design boundaries, not accepted bugs — a *bypass within* these
 boundaries (e.g. a constraint that fails open, like a non-finite amount slipping
