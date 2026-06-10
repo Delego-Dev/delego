@@ -6,6 +6,17 @@ adhere to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.2] — 2026-06-10
+
+Packaging only; protocol unchanged (still 0.3). No functional or API changes.
+
+### Changed
+- Project metadata links the website: `[project.urls]` Homepage →
+  [delegohq.com](https://delegohq.com) (with Documentation and Changelog
+  pages), README links the site, and the MCP Registry entry (`server.json`)
+  carries `websiteUrl`. Released so the links appear on the live PyPI page
+  and registry entry.
+
 ## [0.3.1] — 2026-06-10
 
 UX patch from live MCP testing; protocol unchanged (still 0.3).
@@ -265,7 +276,8 @@ published.) Implements wire-protocol **0.2**; see
   a FastMCP server exposing propose / resolve / audit_tail / show_policy.
 - `NullBroker` (default; holds no credentials) and an `HTTPProxyBroker` sketch.
 
-[Unreleased]: https://github.com/Delego-Dev/delego/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/Delego-Dev/delego/compare/v0.3.2...HEAD
+[0.3.2]: https://github.com/Delego-Dev/delego/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/Delego-Dev/delego/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/Delego-Dev/delego/compare/v0.2.4...v0.3.0
 [0.2.4]: https://github.com/Delego-Dev/delego/compare/v0.2.3...v0.2.4

@@ -1,6 +1,6 @@
 [project]
 name = "delego"
-version = "0.3.1"
+version = "0.3.2"
 description = "Intent-bound action authorization for AI agents — authorise before a credential is used, require human approval for sensitive actions, and prove every action traces back to the instruction that authorised it."
 readme = "README.md"
 requires-python = ">=3.10"
