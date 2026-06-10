@@ -46,11 +46,19 @@ class BrokerAdapter(Protocol):
     and MUST refuse — raise :class:`BrokerRefusal`, never silently strip — when
     ``action.url`` carries a fragment (:attr:`ProposedAction.has_fragment`)
     that the fingerprint does not represent.
+
+    **Authorization token (spec §9, optional).** When a token issuer is
+    configured the firewall passes the minted token as the ``token`` keyword. A
+    *separated* broker (one across a process/network boundary from the
+    authorizer) SHOULD verify it (:func:`delego.verify_token` +
+    :func:`delego.require_fingerprint`) before injecting a credential. A broker
+    that does not implement the token may keep a bare ``execute(action)``
+    signature — the firewall falls back to it.
     """
 
     name: str
 
-    def execute(self, action: ProposedAction) -> dict[str, Any]:
+    def execute(self, action: ProposedAction, token: str | None = None) -> dict[str, Any]:
         ...
 
 
@@ -86,7 +94,7 @@ class NullBroker:
     def __init__(self) -> None:
         self.sent: list[dict] = []
 
-    def execute(self, action: ProposedAction) -> dict[str, Any]:
+    def execute(self, action: ProposedAction, token: str | None = None) -> dict[str, Any]:
         # Honour the execution contract even when simulating: a stray fragment
         # is unauthorised data regardless of whether a real request is made.
         _require_no_unauthorised_fragment(action)
@@ -94,6 +102,9 @@ class NullBroker:
             "broker": self.name,
             "would_send": action.summary(),
             "note": "stub: no credential injected, no upstream request made",
+            # Surfaced so the decision -> execution loop (including a minted §9
+            # token) is observable end to end; NullBroker verifies nothing.
+            "token": token,
         }
         self.sent.append(record)
         return {"status": "simulated", "detail": record}
@@ -138,7 +149,7 @@ class HTTPProxyBroker:
         self.timeout = timeout
         self._headers = {"content-type": "application/json", **(gateway_headers or {})}
 
-    def execute(self, action: ProposedAction) -> dict[str, Any]:
+    def execute(self, action: ProposedAction, token: str | None = None) -> dict[str, Any]:
         import json
         import urllib.error
         import urllib.request
@@ -147,18 +158,22 @@ class HTTPProxyBroker:
         # data outside the fingerprint preimage (spec §4.2).
         _require_no_unauthorised_fragment(action)
 
-        payload = json.dumps(
-            {
-                "method": action.method.upper(),
-                # Forward only the fingerprinted URL (scheme+host+path+query);
-                # the fragment is never represented in the fingerprint, so it is
-                # never sent.
-                "url": action.fingerprinted_url,
-                "params": action.params,
-                "intent_hash": action.intent_hash,
-                "action_fingerprint": action.fingerprint,
-            }
-        ).encode("utf-8")
+        body: dict[str, Any] = {
+            "method": action.method.upper(),
+            # Forward only the fingerprinted URL (scheme+host+path+query); the
+            # fragment is never represented in the fingerprint, so it is never
+            # sent.
+            "url": action.fingerprinted_url,
+            "params": action.params,
+            "intent_hash": action.intent_hash,
+            "action_fingerprint": action.fingerprint,
+        }
+        # When a §9 token was minted, forward it so the gateway can verify the
+        # authorization (and re-check the fingerprint of what it's about to send)
+        # before injecting the credential. The gateway is the separated PEP.
+        if token is not None:
+            body["authorization_token"] = token
+        payload = json.dumps(body).encode("utf-8")
         req = urllib.request.Request(
             self.gateway_url, data=payload, method="POST", headers=self._headers
         )

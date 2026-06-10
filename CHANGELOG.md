@@ -6,6 +6,37 @@ adhere to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.3] — 2026-06-11
+
+Implements the **§9 authorization token** (optional profile). Protocol unchanged
+(still 0.3) — the token is additive and changes no hashed or signed bytes; it's
+off by default, so existing deployments are byte-for-byte unchanged.
+
+### Added
+- **`delego.token`** — a portable, signed PDP→PEP decision artifact (spec §9):
+  a compact JWS / JWT with `alg = EdDSA`. Built on `cryptography` (already a
+  dependency) — **no new dependency**, no PyJWT.
+  - **`TokenIssuer`** mints a short-lived token (TTL ≤ 300s, default 45s) for an
+    `allow` outcome or a released approval — and *only* those; `deny`,
+    `needs_approval`, `denied`, and `consumed` mint nothing.
+  - **`verify_token`** performs §9.1 checks 1–4: pins `EdDSA` and rejects
+    `none`/algorithm-confusion (the key comes from verifier config, never the
+    token header), exact `aud` match, expiry with bounded clock skew, and
+    single-use `jti` (replay) and `cns` (consumption nonce).
+  - **`require_fingerprint`** is §9.1 step 5 — the crux: a broker recomputes the
+    fingerprint of the request it's about to send and requires it equals the
+    token's `fpr`. This is the enforcement-side closure of the "declared vs.
+    sent" gap (a token minted for action A cannot release action B).
+- **`Firewall(token_issuer=..., token_audience=...)`** and
+  **`build_firewall(..., mint_tokens=True)`** wire the profile; the minted token
+  rides on `Decision.token`. A **separate** token signing key
+  (`token_key.pem`, distinct from the audit key per spec §9) is generated on
+  first use.
+- Brokers accept an optional `token=` keyword (non-breaking — a bare
+  `execute(action)` adapter still works); `HTTPProxyBroker` forwards the token to
+  the gateway as `authorization_token` so the separated PEP can verify it.
+- Exports: `TokenIssuer`, `verify_token`, `require_fingerprint`, `TokenError`.
+
 ## [0.3.2] — 2026-06-10
 
 Packaging only; protocol unchanged (still 0.3). No functional or API changes.
@@ -276,7 +307,8 @@ published.) Implements wire-protocol **0.2**; see
   a FastMCP server exposing propose / resolve / audit_tail / show_policy.
 - `NullBroker` (default; holds no credentials) and an `HTTPProxyBroker` sketch.
 
-[Unreleased]: https://github.com/Delego-Dev/delego/compare/v0.3.2...HEAD
+[Unreleased]: https://github.com/Delego-Dev/delego/compare/v0.3.3...HEAD
+[0.3.3]: https://github.com/Delego-Dev/delego/compare/v0.3.2...v0.3.3
 [0.3.2]: https://github.com/Delego-Dev/delego/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/Delego-Dev/delego/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/Delego-Dev/delego/compare/v0.2.4...v0.3.0

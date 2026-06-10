@@ -26,6 +26,7 @@ from .policy import Policy
 _STATE_GITIGNORE = """\
 # delego runtime state — do not commit secrets or the audit ledger.
 signing_key.pem
+token_key.pem
 audit.log.jsonl
 approvals.jsonl
 *.lock
@@ -84,6 +85,16 @@ class Paths:
     def policy(self) -> Path:
         return self.home / "policy.yaml"
 
+    @property
+    def token_private_key(self) -> Path:
+        # Distinct from the audit signing key (spec §9): a token-minting
+        # compromise must not be able to forge the audit chain.
+        return self.home / "token_key.pem"
+
+    @property
+    def token_public_key(self) -> Path:
+        return self.home / "token_key.pub"
+
 
 def ensure_home_gitignore(home: str | os.PathLike) -> None:
     """Drop a ``.gitignore`` in the home so keys/ledger aren't committed when the
@@ -95,7 +106,13 @@ def ensure_home_gitignore(home: str | os.PathLike) -> None:
         gitignore.write_text(_STATE_GITIGNORE, encoding="utf-8")
 
 
-def build_firewall(paths: Paths, broker: BrokerAdapter | None = None) -> Firewall:
+def build_firewall(
+    paths: Paths,
+    broker: BrokerAdapter | None = None,
+    *,
+    mint_tokens: bool = False,
+    token_audience: str = "broker:default",
+) -> Firewall:
     # Load policy first: a missing/invalid policy fails closed with a clear
     # message before any state (keys, ledger) is created.
     policy = Policy.load(paths.policy)
@@ -103,4 +120,24 @@ def build_firewall(paths: Paths, broker: BrokerAdapter | None = None) -> Firewal
     ensure_keys(paths.private_key, paths.public_key)
     audit = AuditLog(paths.audit_log, paths.private_key, paths.public_key)
     approvals = ApprovalStore(paths.approvals)
-    return Firewall(policy, audit, approvals, broker=broker)
+
+    token_issuer = None
+    if mint_tokens:
+        # The §9 profile is opt-in: only when requested do we generate the
+        # (separate) token key and wire an issuer. Off by default, so existing
+        # deployments are byte-for-byte unchanged.
+        from .token import TokenIssuer
+
+        token_issuer = TokenIssuer.from_files(
+            paths.token_private_key,
+            paths.token_public_key,
+            issuer="delego:local",
+        )
+    return Firewall(
+        policy,
+        audit,
+        approvals,
+        broker=broker,
+        token_issuer=token_issuer,
+        token_audience=token_audience,
+    )

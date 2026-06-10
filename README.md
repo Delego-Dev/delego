@@ -206,16 +206,19 @@ See **[ROADMAP.md](ROADMAP.md)** for where delego is going and where to help.
 - **Implemented (protocol 0.3):** the policy engine, intent hashing, action
   fingerprinting **with the URL query folded into the fingerprint** (spec §4.2 —
   `/orders?to=me` and `/orders?to=attacker` are different actions), the
-  confused-deputy guard, intent-bound + single-use human approvals, and the
+  confused-deputy guard, intent-bound + single-use human approvals, the
   signed, hash-chained audit ledger with verification and an external
-  head-anchor check (`delego verify --expected-head`).
+  head-anchor check (`delego verify --expected-head`), and the **§9 authorization
+  token** (optional profile) — a short-lived, EdDSA-signed JWS a separated broker
+  verifies before injecting a credential (`build_firewall(..., mint_tokens=True)`;
+  `verify_token` / `require_fingerprint`).
 - **Brokers:** the default `NullBroker` holds no credentials and makes no real
   request — it records what *would* be sent (for demos and tests). `HTTPProxyBroker`
-  forwards an authorised action to an external credential gateway; or write your
-  own against the `BrokerAdapter` protocol in `delego/brokers.py`.
-- **Not yet:** the authorization token (spec §9, an optional profile), an
-  always-on daemon (state is file-backed and shared by the CLI and MCP server),
-  and a non-MCP HTTP surface.
+  forwards an authorised action — and its authorization token — to an external
+  credential gateway; or write your own against the `BrokerAdapter` protocol in
+  `delego/brokers.py`.
+- **Not yet:** an always-on daemon (state is file-backed and shared by the CLI
+  and MCP server), and a non-MCP HTTP surface.
 - **Known limitations:** concurrent writes to the file-backed ledger and approval
   store are serialised with an OS file lock (corruption-safe). Rate limits are
   **exact on a single host**: a policy carrying a `rate_limit` runs each propose
