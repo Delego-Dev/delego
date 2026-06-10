@@ -23,10 +23,12 @@ from .models import (
     Decision,
     ProposedAction,
 )
+from .client import DaemonClient, DaemonError, daemon_running
+from .daemon import serve
 from .policy import Policy, PolicyError
 from .token import TokenError, TokenIssuer, require_fingerprint, verify_token
 
-__version__ = "0.3.3"  # PyPI package version, 0.x.y (x = protocol, y = iteration)
+__version__ = "0.3.4"  # PyPI package version, 0.x.y (x = protocol, y = iteration)
 
 # Highest delego *protocol* version (see the wire spec's "Protocol versions")
 # this reference implements. Protocol/spec versions are 0.x (two-component); the
@@ -49,6 +51,10 @@ __all__ = [
     "verify_token",
     "require_fingerprint",
     "TokenError",
+    "serve",
+    "DaemonClient",
+    "DaemonError",
+    "daemon_running",
     "OUTCOME_ALLOW",
     "OUTCOME_DENY",
     "OUTCOME_APPROVAL",

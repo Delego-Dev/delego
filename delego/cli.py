@@ -14,10 +14,19 @@ from pathlib import Path
 import click
 
 from .audit import AuditLog, ensure_keys
+from .client import DaemonClient, daemon_running
 from .config import Paths, ensure_home_gitignore
 from .policy import Policy
 
 _EXAMPLE_POLICY = Path(__file__).resolve().parent.parent / "policy.example.yaml"
+
+
+def _daemon(paths: Paths) -> DaemonClient | None:
+    """Return a client to a live daemon at this home, else None.
+
+    When a daemon owns the home it is the sole writer; the CLI routes through it
+    so a human approve/deny doesn't fork state behind the daemon's back."""
+    return DaemonClient(paths.socket) if daemon_running(paths.socket) else None
 
 
 @click.group()
@@ -53,6 +62,24 @@ def home(paths: Paths) -> None:
 
 
 @cli.command()
+@click.option("--mint-tokens", is_flag=True, help="Mint §9 authorization tokens on allow (separate token key).")
+@click.option("--audience", default="broker:default", help="Token audience identifier (with --mint-tokens).")
+@click.pass_obj
+def daemon(paths: Paths, mint_tokens: bool, audience: str) -> None:
+    """Run the single-writer daemon: one process owns the ledger.
+
+    Every client (the CLI's approve/deny, and agents) then routes through it, so
+    `rate_limit` is exact across all of them and the chain has one writer. Runs
+    until Ctrl-C / SIGTERM. Run a single daemon per home.
+    """
+    from .daemon import serve
+
+    click.echo(f"delego daemon — home {paths.home}")
+    click.echo(f"listening on {paths.socket} (Ctrl-C to stop)")
+    serve(paths, mint_tokens=mint_tokens, token_audience=audience)
+
+
+@cli.command()
 @click.pass_obj
 def policy(paths: Paths) -> None:
     """Show the loaded policy summary."""
@@ -74,9 +101,13 @@ def policy(paths: Paths) -> None:
 @click.pass_obj
 def pending(paths: Paths) -> None:
     """List actions awaiting human approval."""
-    from .approval import ApprovalStore
+    d = _daemon(paths)
+    if d is not None:
+        items = d.pending()
+    else:
+        from .approval import ApprovalStore
 
-    items = ApprovalStore(paths.approvals).pending()
+        items = ApprovalStore(paths.approvals).pending()
     if not items:
         click.echo("No pending approvals.")
         return
@@ -106,9 +137,15 @@ def deny(paths: Paths, approval_id: str, approver: str) -> None:
 
 
 def _decide(paths: Paths, approval_id: str, approved: bool, approver: str) -> None:
-    from .approval import ApprovalStore
+    # Route writes through a live daemon (the sole writer) so a human decision
+    # never forks state behind it; otherwise decide directly on the store.
+    d = _daemon(paths)
+    if d is not None:
+        rec = d.decide(approval_id, approved, approver)
+    else:
+        from .approval import ApprovalStore
 
-    rec = ApprovalStore(paths.approvals).decide(approval_id, approved, approver)
+        rec = ApprovalStore(paths.approvals).decide(approval_id, approved, approver)
     if rec is None:
         click.echo(f"No such approval: {approval_id}")
         raise SystemExit(1)

@@ -95,6 +95,25 @@ class Paths:
     def token_public_key(self) -> Path:
         return self.home / "token_key.pub"
 
+    @property
+    def socket(self) -> Path:
+        """The single-writer daemon's Unix socket (delego.daemon / .client).
+
+        Not kept inside the home: Unix socket paths are length-limited (~104
+        chars on macOS) and a deep home (e.g. a project-local ``.claude/.delego``)
+        would exceed it. Instead derive a short, stable path in the per-user
+        runtime/temp dir from the home, so the daemon and any client compute the
+        same path regardless of how deep the home is. The runtime dir
+        (``XDG_RUNTIME_DIR`` where set, else the per-user temp dir) is private to
+        the user; the socket file is additionally chmod 0600 by the daemon.
+        """
+        import hashlib
+        import tempfile
+
+        digest = hashlib.sha256(str(self.home.resolve()).encode("utf-8")).hexdigest()[:16]
+        runtime = os.environ.get("XDG_RUNTIME_DIR") or tempfile.gettempdir()
+        return Path(runtime) / f"delego-{digest}.sock"
+
 
 def ensure_home_gitignore(home: str | os.PathLike) -> None:
     """Drop a ``.gitignore`` in the home so keys/ledger aren't committed when the

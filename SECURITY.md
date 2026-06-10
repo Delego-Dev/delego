@@ -60,11 +60,15 @@ Be precise about what delego does and does not protect against:
   The Ed25519 signing key is stored locally; anyone who can read it (e.g. after
   host compromise) can forge the chain. Use an HSM/KMS and/or an external
   transparency anchor for high assurance.
-- **Rate-limit consistency class (spec §5).** With a `rate_limit` in the policy,
-  each propose runs its count→decide→execute→append sequence under the ledger's
-  exclusive file lock: the cap is **exact among writers sharing one delego home
-  on one host**. Writers on different hosts (or different homes) do not share
-  the lock — the count is best-effort there until the single-writer daemon.
+- **Rate-limit consistency class (spec §5).** Without the daemon, each propose
+  runs its count→decide→execute→append sequence under the ledger's exclusive
+  file lock: the cap is **exact among writers sharing one delego home on one
+  host**, best-effort otherwise. **`delego daemon`** makes it exact across *all*
+  clients: one process owns the ledger over a Unix socket and serializes every
+  operation (the spec's serialized single-writer ledger). The daemon process
+  holds whatever the broker holds (e.g. a real credential) — the same trust as
+  running the firewall yourself; its socket lives in the per-user runtime dir,
+  chmod 0600. The socket transport is local (Unix) only for now.
 
 These are design boundaries, not accepted bugs — a *bypass within* these
 boundaries (e.g. a constraint that fails open, like a non-finite amount slipping
