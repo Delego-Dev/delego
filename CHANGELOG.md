@@ -6,6 +6,51 @@ adhere to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-06-10
+
+Implements wire **protocol 0.3** (`__protocol_version__ = "0.3"`).
+
+### Changed — BREAKING
+- **The URL query string is folded into the `action_fingerprint` preimage**
+  (spec §4.2). The query is canonicalized exactly as specified (split on `&`,
+  first-`=` split, RFC 3986 percent-decoding with `+` as space, sort by
+  name-then-value by code point, duplicates preserved, fragment excluded) and
+  the preimage always carries a `"query"` key (`[]` for a bare URL) — so
+  **every fingerprint changes**, including for URLs with no query. This closes
+  the confused-deputy gap where `/orders?to=me` and `/orders?to=attacker`
+  shared one fingerprint: the *decision* — not merely the broker — is now bound
+  to the query. Approvals parked by ≤ 0.2.x no longer match (they deny,
+  fail-closed); re-propose them. The `hashing` and `resolve` CTK vectors are
+  regenerated in the specification repo. Policy constraints still evaluate
+  `params` only — decision-relevant values MUST travel in `params`.
+- **Brokers now forward the query of an authorised action.** Since the query is
+  fingerprint-bound, `ProposedAction.fingerprinted_url` includes it
+  (scheme+host+path+query); brokers refuse only a `#fragment` (still outside
+  the preimage; `BrokerRefusal`, never a silent strip). New
+  `ProposedAction.has_fragment` and `.canonical_query`; `has_query` is kept for
+  0.2-era adapters. A 0.2.3-style broker that still refuses all queries remains
+  safe — just over-strict.
+
+### Fixed
+- **Rate limits actually hold under concurrency now.** The 0.2.3 changelog
+  claimed the evaluate→execute→append sequence was serialized under the ledger
+  lock, but `engine.propose` never used `audit.transaction()` — concurrent
+  proposes could each read `used < max` and collectively exceed the cap
+  (TOCTOU). For a policy carrying a `rate_limit`, `propose` now runs the whole
+  sequence inside the transaction lock, making the cap **exact among writers
+  sharing one delego home on one host** (spec §5 consistency class; documented
+  in SECURITY.md). Trade-off: the broker call holds the ledger lock for
+  rate-limited policies — keep broker timeouts modest. Regression test:
+  8 concurrent proposes against `max: 2` yield exactly 2 allows.
+
+### Added
+- **`delego verify` is honest about truncation (spec §8.3).** It now prints the
+  chain head (`seq:entry_hash`) so it can be anchored externally, accepts
+  `--expected-head SEQ:HASH` to check against an anchor, and — when no anchor
+  is given — states that truncation of the most recent receipts cannot be
+  ruled out instead of returning an unqualified "valid".
+- `Policy.has_rate_limit` (used by the engine to scope the transaction lock).
+
 ## [0.2.4] — 2026-06-09
 
 Packaging only; protocol unchanged (still 0.2). No functional, API, or
@@ -174,7 +219,10 @@ published.) Implements wire-protocol **0.2**; see
   a FastMCP server exposing propose / resolve / audit_tail / show_policy.
 - `NullBroker` (default; holds no credentials) and an `HTTPProxyBroker` sketch.
 
-[Unreleased]: https://github.com/Delego-Dev/delego/compare/v0.2.2...HEAD
+[Unreleased]: https://github.com/Delego-Dev/delego/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/Delego-Dev/delego/compare/v0.2.4...v0.3.0
+[0.2.4]: https://github.com/Delego-Dev/delego/compare/v0.2.3...v0.2.4
+[0.2.3]: https://github.com/Delego-Dev/delego/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/Delego-Dev/delego/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/Delego-Dev/delego/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/Delego-Dev/delego/releases/tag/v0.2.0

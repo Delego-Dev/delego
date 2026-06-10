@@ -7,15 +7,16 @@ The two derived values on ``ProposedAction`` are the whole point of the design:
   the request that authorised it. (An OAuth token carries no such commitment.)
 
 * ``fingerprint`` — a hash of the concrete action (method + host + path +
-  params). Human approvals are bound to this exact fingerprint, so an agent
-  that gets a "yes" for one action cannot reuse it to execute a different one.
+  canonicalized query + params). Human approvals are bound to this exact
+  fingerprint, so an agent that gets a "yes" for one action cannot reuse it to
+  execute a different one.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any, Optional
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import unquote_plus, urlsplit, urlunsplit
 
 from .util import canonical_json, sha256_hex
 
@@ -51,28 +52,60 @@ class ProposedAction:
     def has_query(self) -> bool:
         """Whether ``url`` carries a query string or fragment.
 
-        Through protocol 0.2 the fingerprint covers only method+host+path+params
-        (spec §4.2): the URL's query string is **not** part of the action's
-        identity. A query or fragment therefore carries data the firewall never
-        authorised — e.g. ``/orders?to=me`` and ``/orders?to=attacker`` share one
-        fingerprint. A broker MUST NOT forward it (spec §4.2); it executes only
-        the fingerprinted URL (:attr:`fingerprinted_url`) and refuses a stray
-        query rather than smuggling decision-relevant data past the decision.
+        Since protocol 0.3 the query **is** part of the fingerprint (see
+        :attr:`canonical_query`), so a query-bearing URL is fully represented in
+        the action's identity and a broker may forward it. The fragment never
+        is — it is excluded from the preimage (spec §4.2) and from
+        :attr:`fingerprinted_url`; brokers refuse it (:attr:`has_fragment`).
+        Kept for backward compatibility with 0.2-era broker adapters.
         """
         parts = urlsplit(self.url)
         return bool(parts.query) or bool(parts.fragment)
 
     @property
+    def has_fragment(self) -> bool:
+        """Whether ``url`` carries a ``#fragment``.
+
+        The fragment is excluded from the fingerprint preimage (spec §4.2) and
+        is never transmitted upstream, so a value riding it was never
+        authorised: brokers refuse rather than silently strip it.
+        """
+        return bool(urlsplit(self.url).fragment)
+
+    @property
+    def canonical_query(self) -> list[list[str]]:
+        """The URL query as the canonical ``[name, value]`` list (spec §4.2).
+
+        The steps are exact — query canonicalization is a parser-differential
+        risk — and implemented mechanically: take the query component (after the
+        first ``?``, before any ``#``; absent or empty → ``[]``); split on ``&``;
+        split each raw pair on its **first** ``=`` (no ``=`` → value ``""``);
+        percent-decode per RFC 3986 with ``+`` as space; sort by name then value
+        by Unicode code point, preserving duplicates. An empty raw segment (as
+        in ``?a=1&&b=2``) is kept as ``["", ""]`` — over-distinguishing URLs is
+        safe, collapsing them is not.
+        """
+        q = urlsplit(self.url).query
+        if not q:
+            return []
+        pairs = []
+        for raw in q.split("&"):
+            name, _, value = raw.partition("=")
+            pairs.append([unquote_plus(name), unquote_plus(value)])
+        pairs.sort()
+        return pairs
+
+    @property
     def fingerprinted_url(self) -> str:
-        """The URL a broker may actually request: scheme + host + path only.
+        """The URL a broker may actually request: scheme + host + path + query.
 
         This is the exact slice of ``url`` that the fingerprint commits to
-        (host + path; method and params travel separately). Any query string or
-        fragment on ``url`` is dropped, because it is not represented in the
-        fingerprint and so was never authorised (see :attr:`has_query`).
+        (host + path + query; method and params travel separately). Any
+        ``#fragment`` is excluded, because it is not represented in the
+        fingerprint and so was never authorised (see :attr:`has_fragment`).
         """
         parts = urlsplit(self.url)
-        return urlunsplit((parts.scheme, parts.netloc, parts.path, "", ""))
+        return urlunsplit((parts.scheme, parts.netloc, parts.path, parts.query, ""))
 
     @property
     def intent_hash(self) -> str:
@@ -80,6 +113,9 @@ class ProposedAction:
 
     @property
     def fingerprint(self) -> str:
+        # The protocol 0.3 preimage (spec §4.2): the canonical query is always
+        # present ("query": [] for a bare URL), binding the *executed* query to
+        # the *proposed* one. Policy constraints still evaluate params only.
         return sha256_hex(
             canonical_json(
                 {
@@ -87,6 +123,7 @@ class ProposedAction:
                     "host": self.host,
                     "path": self.path,
                     "params": self.params,
+                    "query": self.canonical_query,
                 }
             )
         )

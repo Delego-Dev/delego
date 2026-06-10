@@ -49,7 +49,18 @@ class Firewall:
 
     # ------------------------------------------------------------------ #
     def propose(self, action: ProposedAction) -> Decision:
-        outcome, rule, reasons = self.policy.evaluate(action, self.audit)
+        # A rate_limit is exact only if its count→decide→append sequence is
+        # atomic: two concurrent proposes must not both read `used < max` before
+        # either appends its allow. For rate-limited policies the whole pipeline
+        # runs inside the ledger's transaction (file) lock — which also means
+        # the broker call holds that lock; keep broker timeouts modest.
+        if self.policy.has_rate_limit:
+            with self.audit.transaction() as audit:
+                return self._propose(action, audit)
+        return self._propose(action, self.audit)
+
+    def _propose(self, action: ProposedAction, audit) -> Decision:
+        outcome, rule, reasons = self.policy.evaluate(action, audit)
         ih, fp = action.intent_hash, action.fingerprint
 
         if outcome == OUTCOME_APPROVAL:
@@ -60,7 +71,7 @@ class Firewall:
                 instruction=action.instruction,
                 rule=rule,
             )
-            self.audit.append(
+            audit.append(
                 phase="decision",
                 outcome=OUTCOME_APPROVAL,
                 rule=rule,
@@ -73,10 +84,10 @@ class Firewall:
             return Decision(OUTCOME_APPROVAL, rule, reasons, ih, fp, approval_id=approval_id)
 
         if outcome == OUTCOME_ALLOW:
-            return self._execute(action, rule, reasons, ih, fp, approval_id=None)
+            return self._execute(action, rule, reasons, ih, fp, approval_id=None, audit=audit)
 
         # deny
-        self.audit.append(
+        audit.append(
             phase="decision",
             outcome=OUTCOME_DENY,
             rule=rule,
@@ -149,7 +160,9 @@ class Firewall:
         assert rec["status"] == STATUS_APPROVED
         self.approvals.consume(approval_id)
         reasons = [f"human approved by {rec.get('approver')!r}"]
-        return self._execute(action, rec.get("rule"), reasons, ih, fp, approval_id=approval_id)
+        return self._execute(
+            action, rec.get("rule"), reasons, ih, fp, approval_id=approval_id, audit=self.audit
+        )
 
     # ------------------------------------------------------------------ #
     def _refuse(self, action, intent_hash, fingerprint, approval_id, reason) -> Decision:
@@ -168,9 +181,17 @@ class Firewall:
         return Decision(OUTCOME_DENY, None, reasons, intent_hash, fingerprint, approval_id=approval_id)
 
     # ------------------------------------------------------------------ #
-    def _execute(self, action, rule, reasons, intent_hash, fingerprint, approval_id) -> Decision:
+    def _execute(
+        self, action, rule, reasons, intent_hash, fingerprint, approval_id, audit
+    ) -> Decision:
+        """Run the broker, then record the execution receipt.
+
+        ``audit`` is the handle to append with: the in-transaction view when
+        called under :meth:`propose`'s rate-limit lock (the lock is not
+        re-entrant), the plain log (``self.audit``) otherwise.
+        """
         result = self.broker.execute(action)
-        self.audit.append(
+        audit.append(
             phase="execution",
             outcome=OUTCOME_ALLOW,
             rule=rule,

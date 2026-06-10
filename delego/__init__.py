@@ -25,13 +25,13 @@ from .models import (
 )
 from .policy import Policy, PolicyError
 
-__version__ = "0.2.4"  # PyPI package version, 0.x.y (x = protocol, y = iteration)
+__version__ = "0.3.0"  # PyPI package version, 0.x.y (x = protocol, y = iteration)
 
 # Highest delego *protocol* version (see the wire spec's "Protocol versions")
 # this reference implements. Protocol/spec versions are 0.x (two-component); the
 # PyPI package is 0.x.y where x is the protocol and y the iteration. The spec
 # leads the reference: the spec's version MUST always be >= this.
-__protocol_version__ = "0.2"
+__protocol_version__ = "0.3"
 
 __all__ = [
     "ProposedAction",
