@@ -212,18 +212,25 @@ See **[ROADMAP.md](ROADMAP.md)** for where delego is going and where to help.
   token** (optional profile) — a short-lived, EdDSA-signed JWS a separated broker
   verifies before injecting a credential (`build_firewall(..., mint_tokens=True)`;
   `verify_token` / `require_fingerprint`).
+- **Single-writer daemon** (`delego daemon`): one long-running process owns the
+  ledger, so every client routes through it and `rate_limit` is exact across all
+  of them — not just one host's file lock. The CLI's `approve`/`deny`/`pending`
+  auto-route to a running daemon. Optional: with no daemon, everything works
+  file-backed as before.
 - **Brokers:** the default `NullBroker` holds no credentials and makes no real
   request — it records what *would* be sent (for demos and tests). `HTTPProxyBroker`
   forwards an authorised action — and its authorization token — to an external
   credential gateway; or write your own against the `BrokerAdapter` protocol in
   `delego/brokers.py`.
-- **Not yet:** an always-on daemon (state is file-backed and shared by the CLI
-  and MCP server), and a non-MCP HTTP surface.
-- **Known limitations:** concurrent writes to the file-backed ledger and approval
-  store are serialised with an OS file lock (corruption-safe). Rate limits are
-  **exact on a single host**: a policy carrying a `rate_limit` runs each propose
-  (including the broker call) under the ledger's transaction lock, so keep broker
-  timeouts modest; cross-host exactness needs the planned single-writer daemon.
+- **Not yet:** the MCP agent surface auto-routing to the daemon (it still talks
+  to the firewall directly — wiring it is the next step), a TCP/cross-host
+  daemon transport (it's a local Unix socket today), and a non-MCP HTTP surface.
+- **Known limitations:** without the daemon, concurrent writes to the file-backed
+  ledger and approval store are serialised with an OS file lock (corruption-safe),
+  and a `rate_limit` is exact only among processes sharing one home on one host.
+  **Run `delego daemon` for exact rate limits across all clients** (one writer).
+  The daemon serializes one action in flight at a time (a reserve-then-execute
+  throughput optimization, and a TCP transport for other hosts, are future work).
   Path globbing is coarse (`**` and `*` collapse).
 
 ## License

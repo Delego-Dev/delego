@@ -6,6 +6,35 @@ adhere to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.4] — 2026-06-11
+
+Adds the **single-writer daemon**. Protocol unchanged (still 0.3); the daemon is
+optional — with no daemon running, everything works file-backed exactly as
+before.
+
+### Added
+- **`delego daemon`** — one long-running process owns the `Firewall` and exposes
+  it over a Unix domain socket (line-delimited JSON), serializing every
+  operation under a single lock. So every client routes through one writer and a
+  `rate_limit` is **exact across all clients** (the spec's serialized
+  single-writer ledger, §5/§11) — not just one host's file lock. No new
+  dependency (stdlib `socketserver`).
+- **`delego.DaemonClient`** (+ `serve`, `daemon_running`) — a thin client for the
+  socket protocol: `propose` / `resolve` / `decide` / `pending` / `policy` /
+  `audit_tail` / `verify` / `ping`.
+- The CLI's `approve` / `deny` / `pending` **auto-route to a running daemon**
+  (the sole writer), so a human decision never forks state behind it; with no
+  daemon they decide directly, unchanged.
+
+### Notes
+- The daemon socket lives in the per-user runtime dir (`XDG_RUNTIME_DIR` or the
+  private temp dir), keyed by a hash of the home — Unix socket paths are
+  length-limited and a deep home would overflow. chmod 0600.
+- Scoped out (follow-ups): routing the MCP agent surface to the daemon, a
+  TCP/cross-host transport, and a reserve-then-execute path so the broker call
+  runs outside the serialization lock. The daemon requires Unix domain sockets
+  (not Windows); `serve` raises a clear error elsewhere.
+
 ## [0.3.3] — 2026-06-11
 
 Implements the **§9 authorization token** (optional profile). Protocol unchanged
@@ -307,7 +336,8 @@ published.) Implements wire-protocol **0.2**; see
   a FastMCP server exposing propose / resolve / audit_tail / show_policy.
 - `NullBroker` (default; holds no credentials) and an `HTTPProxyBroker` sketch.
 
-[Unreleased]: https://github.com/Delego-Dev/delego/compare/v0.3.3...HEAD
+[Unreleased]: https://github.com/Delego-Dev/delego/compare/v0.3.4...HEAD
+[0.3.4]: https://github.com/Delego-Dev/delego/compare/v0.3.3...v0.3.4
 [0.3.3]: https://github.com/Delego-Dev/delego/compare/v0.3.2...v0.3.3
 [0.3.2]: https://github.com/Delego-Dev/delego/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/Delego-Dev/delego/compare/v0.3.0...v0.3.1

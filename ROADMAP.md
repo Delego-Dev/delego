@@ -31,6 +31,10 @@ implements and `y` the iteration. Normative changes land in the spec first.
   separated broker verifies it (pin EdDSA, exact `aud`, single-use `jti`/`cns`)
   and re-checks the fingerprint of the request it's about to send before
   injecting a credential (0.3.3). No new dependency.
+- **Single-writer daemon** (`delego daemon`) — one process owns the ledger over a
+  Unix socket; every client routes through it, so `rate_limit` is exact across
+  all clients (the spec's serialized single-writer ledger), not just one host's
+  file lock (0.3.4). CLI `approve`/`deny`/`pending` auto-route to it.
 
 ## Now — make it usable in production (protocol 0.3)
 
@@ -51,11 +55,14 @@ implements and `y` the iteration. Normative changes land in the spec first.
 
 ## Next — differentiate and harden (protocol 0.3, spec-first)
 
-4. **Single-writer daemon.** A long-running process so non-MCP clients work, the
-   CLI + MCP share live state over a socket, and rate-limit counting is exact
-   across hosts without holding a file lock through broker calls (0.2.1 made
-   writes corruption-safe; 0.3.0 made the cap exact on one host; this makes it
-   serial everywhere).
+4. **Route the MCP agent surface through the daemon.** The daemon shipped in
+   0.3.4 (CLI clients route to it); wiring `delego_propose_action` /
+   `_resolve_action` to it realizes exact cross-client rate limits for agents in
+   production, not just the CLI/tests.
+5. **Daemon TCP / cross-host transport.** Today the daemon is a local Unix
+   socket; the same line protocol over TCP (with auth) lets other hosts share one
+   writer. Plus a reserve-then-execute path so the broker call runs outside the
+   serialization lock (throughput).
 
 ## Later
 
