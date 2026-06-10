@@ -26,6 +26,11 @@ implements and `y` the iteration. Normative changes land in the spec first.
   the `action_fingerprint`, so decision-relevant data can't ride it (0.3.0,
   breaking; regenerated CTK vectors). Rate-limited proposes are serialized under
   the ledger lock, making the cap exact on a single host (0.3.0).
+- **Signed authorization token** (spec §9) — on `allow`/release the authorizer
+  mints a short-lived EdDSA JWS bound to the action fingerprint + intent; a
+  separated broker verifies it (pin EdDSA, exact `aud`, single-use `jti`/`cns`)
+  and re-checks the fingerprint of the request it's about to send before
+  injecting a credential (0.3.3). No new dependency.
 
 ## Now — make it usable in production (protocol 0.3)
 
@@ -46,12 +51,7 @@ implements and `y` the iteration. Normative changes land in the spec first.
 
 ## Next — differentiate and harden (protocol 0.3, spec-first)
 
-4. **Signed authorization token** (spec §9, already drafted). On allow/approve,
-   mint a short-lived JWS bound to the action fingerprint + intent; a broker
-   verifies it before injecting a credential. Closes the gap where a broker would
-   inject for *any* in-scope request, and makes delego composable across vendors.
-   *This is the moat.*
-5. **Single-writer daemon.** A long-running process so non-MCP clients work, the
+4. **Single-writer daemon.** A long-running process so non-MCP clients work, the
    CLI + MCP share live state over a socket, and rate-limit counting is exact
    across hosts without holding a file lock through broker calls (0.2.1 made
    writes corruption-safe; 0.3.0 made the cap exact on one host; this makes it

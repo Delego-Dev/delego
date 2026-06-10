@@ -145,6 +145,10 @@ class Decision:
     approval_id: Optional[str] = None
     executed: bool = False
     result: Optional[dict] = None
+    # The §9 authorization token, when a token issuer is configured and the
+    # outcome is `allow` (or a released approval). A short-lived JWS a separated
+    # broker can verify before injecting a credential. None otherwise.
+    token: Optional[str] = None
 
     @property
     def allowed(self) -> bool:

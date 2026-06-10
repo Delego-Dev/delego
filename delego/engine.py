@@ -15,6 +15,8 @@ Two entry points:
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from .approval import (
     STATUS_APPROVED,
     STATUS_CONSUMED,
@@ -33,6 +35,9 @@ from .models import (
 )
 from .policy import Policy
 
+if TYPE_CHECKING:
+    from .token import TokenIssuer
+
 
 class Firewall:
     def __init__(
@@ -41,11 +46,20 @@ class Firewall:
         audit: AuditLog,
         approvals: ApprovalStore,
         broker: BrokerAdapter | None = None,
+        token_issuer: "TokenIssuer | None" = None,
+        token_audience: str = "broker:default",
     ) -> None:
         self.policy = policy
         self.audit = audit
         self.approvals = approvals
         self.broker = broker or NullBroker()
+        # Optional §9 profile: when wired, the firewall mints a short-lived
+        # authorization token for `allow` outcomes (and released approvals) and
+        # attaches it to the Decision for a separated broker to verify. Default
+        # off — the in-process broker already trusts the decision, so behaviour
+        # and receipts are unchanged when this is None.
+        self.token_issuer = token_issuer
+        self.token_audience = token_audience
 
     # ------------------------------------------------------------------ #
     def propose(self, action: ProposedAction) -> Decision:
@@ -202,9 +216,14 @@ class Firewall:
         crash between authorisation and execution leaves no trace the action
         was ever authorised. The failure is recorded as an ``execution``/deny
         receipt and the exception re-raised for the caller.
+
+        If a token issuer is configured, a §9 authorization token is minted for
+        this `allow` and handed to the broker (which MAY verify it before
+        injecting) and returned on the Decision.
         """
+        token = self._mint_token(rule, intent_hash, fingerprint, approval_id)
         try:
-            result = self.broker.execute(action)
+            result = self._broker_execute(action, token)
         except Exception as e:
             audit.append(
                 phase="execution",
@@ -236,4 +255,36 @@ class Firewall:
             approval_id=approval_id,
             executed=True,
             result=result,
+            token=token,
         )
+
+    # ------------------------------------------------------------------ #
+    def _mint_token(self, rule, intent_hash, fingerprint, approval_id):
+        """Mint a §9 token for an `allow`, or None if no issuer is configured.
+
+        Only ever called from :meth:`_execute`, i.e. for `allow` and released
+        approvals — never for `deny`/`needs_approval`/`denied`/`consumed`, which
+        per spec §9 MUST NOT mint."""
+        if self.token_issuer is None:
+            return None
+        return self.token_issuer.mint(
+            action_fingerprint=fingerprint,
+            intent_hash=intent_hash,
+            audience=self.token_audience,
+            approval_id=approval_id,
+            policy_version=self.policy.version,
+            rule=rule,
+        )
+
+    def _broker_execute(self, action, token):
+        """Call the broker, passing the token when the broker accepts one.
+
+        Brokers MAY take an optional ``token`` keyword (the shipped adapters do);
+        a 0.2/0.3-era adapter with a bare ``execute(action)`` keeps working."""
+        if token is None:
+            return self.broker.execute(action)
+        try:
+            return self.broker.execute(action, token=token)
+        except TypeError:
+            # Broker predates the token kwarg — fall back, unchanged behaviour.
+            return self.broker.execute(action)

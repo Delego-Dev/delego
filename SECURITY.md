@@ -42,7 +42,12 @@ Be precise about what delego does and does not protect against:
   The agent supplies `params`, `url`, and `instruction`; delego trusts them. Its
   guarantees hold only if your broker executes exactly the fingerprinted action.
   delego is a control only when the credential is reachable **solely** through the
-  broker — an agent with raw network/exec can bypass it entirely.
+  broker — an agent with raw network/exec can bypass it entirely. The
+  enforcement-side closure is the §9 token's step-5 re-check
+  (`require_fingerprint`): a token-requiring broker recomputes the fingerprint of
+  the request it is about to send and refuses if it doesn't equal the authorized
+  `fpr`, so an agent that declared one action but tries to send another is
+  refused at the PEP.
 - **The recorded intent is the agent's claim.** `intent_hash` binds the
   instruction the agent *reported*; it is not verified against the real human
   request, so under a fully compromised agent the audited intent is

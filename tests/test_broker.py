@@ -94,3 +94,30 @@ def test_firewall_allow_executes_through_the_gateway(tmp_path, gateway):
     assert d.outcome == "allow" and d.executed is True
     assert d.result["response"]["injected"] is True
     assert fw.audit.verify()[0] is True
+
+
+def test_firewall_forwards_a_verifiable_token_to_the_gateway(tmp_path, gateway):
+    # With the §9 profile on, the broker forwards the minted token; a separated
+    # gateway can verify it and re-check the fingerprint of what it will send.
+    from delego import require_fingerprint, verify_token
+
+    home = tmp_path / "home"
+    home.mkdir()
+    (home / "policy.yaml").write_text(_POLICY, encoding="utf-8")
+    fw = build_firewall(
+        Paths.resolve(home),
+        broker=HTTPProxyBroker(gateway),
+        mint_tokens=True,
+        token_audience="broker:default",
+    )
+
+    action = ProposedAction("read my data", "GET", "https://api.example.com/x", {})
+    d = fw.propose(action)
+
+    assert d.outcome == "allow" and d.token is not None
+    forwarded = d.result["response"]["forwarded"]
+    assert forwarded["authorization_token"] == d.token  # reached the gateway
+
+    # The gateway verifies the token and binds it to the exact action (step 5).
+    claims = verify_token(d.token, public_key=fw.token_issuer.public_key, audience="broker:default")
+    require_fingerprint(claims, action)
